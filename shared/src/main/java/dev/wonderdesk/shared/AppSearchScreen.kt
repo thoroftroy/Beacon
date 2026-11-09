@@ -42,6 +42,13 @@ fun loadLaunchableApps(context: Context): List<LaunchableApp> {
 
 fun Context.launchApp(app: LaunchableApp, report: (String) -> Unit) = launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED), report)
 
+/** Most-recent-first, case-insensitive dedupe, bounded. Pure for testing. */
+fun updateRecentSearches(current: List<String>, query: String, limit: Int = 8): List<String> {
+    val term = query.trim().take(128)
+    if (term.isEmpty()) return current
+    return (listOf(term) + current.filterNot { it.equals(term, ignoreCase = true) }).take(limit.coerceIn(1, 32))
+}
+
 @Composable
 fun AppSearchScreen(manage: Boolean = false) {
     val context = LocalContext.current
@@ -50,6 +57,18 @@ fun AppSearchScreen(manage: Boolean = false) {
     var apps by remember { mutableStateOf(listOf<LaunchableApp>()) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<LaunchableApp?>(null) }
+    val searchPrefs = remember { context.getSharedPreferences("beacon", Context.MODE_PRIVATE) }
+    var recents by remember {
+        mutableStateOf(runCatching {
+            val array = org.json.JSONArray(searchPrefs.getString("recent", "[]"))
+            (0 until minOf(array.length(), 32)).map { array.getString(it) }.filter { it.isNotBlank() }
+        }.getOrDefault(emptyList()))
+    }
+    fun rememberSearch(term: String) {
+        if (manage) return
+        recents = updateRecentSearches(recents, term)
+        searchPrefs.edit().putString("recent", org.json.JSONArray(recents).toString()).apply()
+    }
     val matches = remember(apps, query) { apps.filter { it.matches(query) } }
     fun refresh() { op.run("Reading launchable installed apps", { loadLaunchableApps(context) }) { apps = it; op.notice("${it.size} launchable apps. Android may hide other packages.") } }
     DisposableEffect(activity) {
@@ -66,14 +85,18 @@ fun AppSearchScreen(manage: Boolean = false) {
             if (calculation != null) Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("= $calculation", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall); TextButton(onClick = { context.copyText("Calculation result", calculation) }) { Text("Copy") } }
             }
-            if (query.isNotBlank()) TextButton(onClick = { context.launchSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://duckduckgo.com/?q=${Uri.encode(query)}")), op::notice) }) { Text("Search web in browser (sends query)") }
+            if (query.isNotBlank()) TextButton(onClick = { rememberSearch(query); context.launchSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://duckduckgo.com/?q=${Uri.encode(query)}")), op::notice) }) { Text("Search web in browser (sends query)") }
+            if (query.isBlank() && recents.isNotEmpty()) {
+                Text("Recent searches (this app only)", style = MaterialTheme.typography.bodySmall)
+                recents.forEach { recent -> TextButton(onClick = { query = recent }) { Text(recent) } }
+            }
             Text("Only launchable apps and local calculations. Files, private notes and media are not indexed.", style = MaterialTheme.typography.bodySmall)
         } else Text("Installed launchable apps only; no store or update service. Android asks before uninstalling anything.", style = MaterialTheme.typography.bodySmall)
         OperationStatus(op)
         if (query.isNotBlank() && !op.busy) Text("${matches.size} matching apps", style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(matches, key = { it.key }) { app ->
-                Card(onClick = { if (manage) selected = app else context.launchApp(app, op::notice) }, modifier = Modifier.fillMaxWidth()) {
+                Card(onClick = { if (manage) selected = app else { rememberSearch(query); context.launchApp(app, op::notice) } }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         app.icon?.let { Image(it.asImageBitmap(), null, Modifier.size(48.dp)) }
                         Column(Modifier.weight(1f)) { Text(app.title); Text(if (manage) "${app.version} · ${app.component.packageName}" else app.component.packageName, style = MaterialTheme.typography.bodySmall) }

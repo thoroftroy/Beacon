@@ -16,4 +16,11 @@ class AppSearchTest {
         assertFalse(app.matches("no such app"))
         assertTrue(app.matches("   "))
     }
+    @Test fun recentSearchesDedupeAndCap() {
+        assertEquals(listOf("B", "a"), updateRecentSearches(listOf("a", "b"), "  B "))
+        assertEquals(listOf("c", "a", "b"), updateRecentSearches(listOf("a", "b"), "c"))
+        assertEquals(listOf("a"), updateRecentSearches(listOf("a"), "   "))
+        assertEquals(listOf("q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7"), updateRecentSearches((1..12).map { "q$it" }, "q0"))
+        assertEquals(8, updateRecentSearches((1..12).map { "q$it" }, "new").size)
+    }
 }
