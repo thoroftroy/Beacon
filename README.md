@@ -1,27 +1,21 @@
 # Beacon for Android
 
-Beacon finds your installed apps and calculates quick sums. By Rednave.
+Searches your installed apps and calculates quick sums. By Rednave.
 
 ## Easiest install and updates
 
 Get App Hub once from https://github.com/thoroftroy/App-Hub/releases, then use it to install and update this app and the rest of the suite. You will not need to download APKs by hand.
-
 ## Install
 
-Requires Android 10 or newer (best on Android 13+).
-
-1. Copy the APK file to your phone (USB, Bluetooth, cloud drive — whatever you like) and tap it.
-2. Allow "install from unknown sources" when asked.
-3. Open the app from your app drawer.
-
+Install the APK, then open the app. Your phone may ask you to allow unknown sources first. Needs Android 10 or newer.
 ## Using Beacon
 
-- Type to search your installed apps by name. Recent searches are kept on the phone and can be tapped to search again.
-- Type a sum like 2+3*4 to calculate it right in the search box, with a Copy button.
-- There is an optional web search button; it opens your browser and sends your query only when you tap it.
+- Type to search your installed apps by name. Recent searches stay on the phone so you can rerun them.
+- Type a sum like 2+3*4 to get the answer with a Copy button.
+- The web button opens your browser. Nothing leaves the phone until you tap it.
 
-Beacon does not search files, notes or message contents.
+Beacon only searches app names. It does not look through files or messages.
 
 ## Look and feel
 
-Open About inside the app to choose between Aqua, Bliss, Dark Bliss and Super, and to adjust motion. Aqua is the default.
+Open About in the app to change the theme or motion. Aqua is the default.
