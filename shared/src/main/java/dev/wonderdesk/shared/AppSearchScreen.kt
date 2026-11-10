@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class LaunchableApp(val component: ComponentName, val title: String, val icon: Bitmap?, val version: String, val aliases: List<String> = emptyList()) {
     val key: String get() = component.flattenToString()
@@ -77,8 +79,7 @@ fun AppSearchScreen(manage: Boolean = false) {
         if (term.length < 2) { fileHits = emptyList(); searchedTerm = ""; return@LaunchedEffect }
         if (term == searchedTerm) return@LaunchedEffect
         searchedTerm = term
-        val found = runCatching { searchFiles(context, term) }.getOrDefault(emptyList())
-        fileHits = found
+        fileHits = withContext(Dispatchers.IO) { runCatching { searchFiles(context, term) }.getOrDefault(emptyList()) }
     }
     fun refresh() { op.run("Reading launchable installed apps", { loadLaunchableApps(context) }) { apps = it; op.notice("${it.size} launchable apps. Android may hide other packages.") } }
     DisposableEffect(activity) {

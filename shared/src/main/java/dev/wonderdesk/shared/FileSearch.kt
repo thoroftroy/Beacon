@@ -3,7 +3,6 @@ package dev.wonderdesk.shared
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import java.io.File
 
@@ -18,53 +17,63 @@ fun searchFiles(context: Context, query: String, limit: Int = 30): List<FileHit>
     val hits = mutableListOf<FileHit>()
     val seen = mutableSetOf<String>()
 
-    fun add(uri: Uri, name: String, size: Long, isText: Boolean) {
-        if (hits.size >= limit || !seen.add(uri.toString())) return
-        if (name.contains(term, ignoreCase = true)) {
-            hits += FileHit(name, displayPath(uri), uri, size, isText)
-        }
-    }
-
-    // Documents and downloads via MediaStore.Files (all visible files).
-    val projection = arrayOf(
-        MediaStore.Files.FileColumns._ID,
-        MediaStore.Files.FileColumns.DISPLAY_NAME,
-        MediaStore.Files.FileColumns.SIZE,
-        MediaStore.Files.FileColumns.MIME_TYPE,
-        MediaStore.Files.FileColumns.RELATIVE_PATH,
-    )
+    // Pass 1: MediaStore documents/downloads, no permission needed.
     runCatching {
-        val collection = MediaStore.Files.getContentUri("external")
-        context.contentResolver.query(collection, projection, null, null, "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC")?.use { c ->
-            val id = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-            val name = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
-            val size = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
-            val mime = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
-            val rel = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.RELATIVE_PATH)
+        val collection = android.provider.MediaStore.Files.getContentUri("external")
+        context.contentResolver.query(
+            collection,
+            arrayOf(
+                android.provider.MediaStore.Files.FileColumns._ID,
+                android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME,
+                android.provider.MediaStore.Files.FileColumns.SIZE,
+            ),
+            "${android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE ?",
+            arrayOf("%$term%"),
+            "${android.provider.MediaStore.Files.FileColumns.DATE_MODIFIED} DESC"
+        )?.use { c ->
+            val id = c.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns._ID)
+            val name = c.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME)
+            val size = c.getColumnIndexOrThrow(android.provider.MediaStore.Files.FileColumns.SIZE)
             while (c.moveToNext() && hits.size < limit) {
-                val uri = Uri.withAppendedPath(collection, c.getLong(id).toString())
+                val uri = android.content.ContentUris.withAppendedId(collection, c.getLong(id))
                 val n = c.getString(name) ?: continue
-                val mimeType = c.getString(mime) ?: "application/octet-stream"
-                add(uri, n, c.getLong(size), mimeType.startsWith("text/") || isTextExt(n))
+                val rel = runCatching {
+                    context.contentResolver.query(uri, arrayOf(android.provider.MediaStore.Files.FileColumns.RELATIVE_PATH), null, null, null)?.use { r -> if (r.moveToFirst()) r.getString(0) else null }
+                }.getOrNull() ?: ""
+                if (seen.add(uri.toString())) {
+                    hits += FileHit(n, rel ?: "", uri, c.getLong(size), isTextExt(n))
+                }
             }
         }
     }
 
-    // Public folders fallback (files MediaStore may not have indexed yet).
-    val roots = listOf(
-        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
-        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
-    )
-    for (root in roots) {
-        runCatching { root.walkTopDown().maxDepth(6).filter { it.isFile && it.name.contains(term, ignoreCase = true) } }
-            .getOrDefault(emptySequence())
-            .forEach { f ->
+    // Pass 2: direct walk of the public folders for files MediaStore missed.
+    val roots = mutableListOf<File>()
+    for (name in listOf(
+        android.os.Environment.DIRECTORY_DOWNLOADS,
+        android.os.Environment.DIRECTORY_DOCUMENTS,
+        android.os.Environment.DIRECTORY_DCIM,
+        android.os.Environment.DIRECTORY_PICTURES,
+        android.os.Environment.DIRECTORY_MUSIC,
+        android.os.Environment.DIRECTORY_MOVIES,
+        "Alarms", "Notifications", "Ringtones"
+    )) {
+        runCatching { android.os.Environment.getExternalStoragePublicDirectory(name) }.getOrNull()?.let { roots.add(it) }
+    }
+    roots.add(android.os.Environment.getExternalStorageDirectory())
+    for (root in roots.distinctBy { it.absolutePath }) {
+        if (hits.size >= limit) break
+        runCatching {
+            root.walkTopDown().maxDepth(6).forEach { f ->
                 if (hits.size >= limit) return@forEach
+                if (!f.isFile) return@forEach
+                if (!f.name.contains(term, ignoreCase = true)) return@forEach
                 val key = f.canonicalPath
                 if (seen.add(key)) {
                     hits += FileHit(f.name, f.parent ?: root.path, Uri.fromFile(f), f.length(), isTextExt(f.name))
                 }
             }
+        }
     }
     return hits.take(limit)
 }
