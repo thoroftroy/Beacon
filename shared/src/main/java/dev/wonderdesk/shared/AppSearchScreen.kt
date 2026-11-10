@@ -70,6 +70,16 @@ fun AppSearchScreen(manage: Boolean = false) {
         searchPrefs.edit().putString("recent", org.json.JSONArray(recents).toString()).apply()
     }
     val matches = remember(apps, query) { apps.filter { it.matches(query) } }
+    var fileHits by remember { mutableStateOf(listOf<FileHit>()) }
+    var searchedTerm by remember { mutableStateOf("") }
+    LaunchedEffect(query) {
+        val term = query.trim()
+        if (term.length < 2) { fileHits = emptyList(); searchedTerm = ""; return@LaunchedEffect }
+        if (term == searchedTerm) return@LaunchedEffect
+        searchedTerm = term
+        val found = runCatching { searchFiles(context, term) }.getOrDefault(emptyList())
+        fileHits = found
+    }
     fun refresh() { op.run("Reading launchable installed apps", { loadLaunchableApps(context) }) { apps = it; op.notice("${it.size} launchable apps. Android may hide other packages.") } }
     DisposableEffect(activity) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) refresh() }
@@ -90,11 +100,25 @@ fun AppSearchScreen(manage: Boolean = false) {
                 Text("Recent searches (this app only)", style = MaterialTheme.typography.bodySmall)
                 recents.forEach { recent -> TextButton(onClick = { query = recent }) { Text(recent) } }
             }
-            Text("Only launchable apps and local calculations. Files, private notes and media are not indexed.", style = MaterialTheme.typography.bodySmall)
+            Text("Apps, calculations and files with matching names. File contents are not searched. Web sends the query only when you tap it.", style = MaterialTheme.typography.bodySmall)
         } else Text("Installed launchable apps only; no store or update service. Android asks before uninstalling anything.", style = MaterialTheme.typography.bodySmall)
         OperationStatus(op)
         if (query.isNotBlank() && !op.busy) Text("${matches.size} matching apps", style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (!manage && fileHits.isNotEmpty()) {
+                item { Text("Files", style = MaterialTheme.typography.titleSmall) }
+                items(fileHits, key = { it.uri.toString() }) { hit ->
+                    Card(onClick = { rememberSearch(query); openFileIntent(context, hit) }, modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text(hit.name)
+                                Text("${hit.path} · ${android.text.format.Formatter.formatShortFileSize(context, hit.size)}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text("Open", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
             items(matches, key = { it.key }) { app ->
                 Card(onClick = { if (manage) selected = app else { rememberSearch(query); context.launchApp(app, op::notice) } }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
