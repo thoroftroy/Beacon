@@ -1,6 +1,6 @@
 # Beacon for Android
 
-Searches your installed apps and calculates quick sums. By Rednave.
+Searches your installed apps and calculates quick sums.
 
 ## Easiest install and updates
 
