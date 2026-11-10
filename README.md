@@ -1,21 +1,24 @@
-# Beacon for Android
+# Beacon
 
-Searches your installed apps and calculates quick sums.
+Search your whole phone from one box.
 
-## Easiest install and updates
+## What it does
 
-Get App Hub once from https://github.com/thoroftroy/App-Hub/releases, then use it to install and update this app and the rest of the suite. You will not need to download APKs by hand.
-## Install
+- Finds apps (including Wonderdesk nicknames, such as "files" for Wayfinder), settings pages, contacts, files by name, and **words inside files**: notes, Markdown, text, code, subtitles and CSV files.
+- Results show where each file lives. Open it in the right app, show it in Wayfinder, or edit it in Scribble.
+- Type a sum like `12*7+3` for a quick answer, or search the web when you ask.
+- The file index is built and kept on your phone and updates by itself. Needs Android's all-files access for file search.
 
-Install the APK, then open the app. Your phone may ask you to allow unknown sources first. Needs Android 10 or newer.
-## Using Beacon
+## Install and update
 
-- Type to search your installed apps by name. Recent searches stay on the phone so you can rerun them.
-- Type a sum like 2+3*4 to get the answer with a Copy button.
-- The web button opens your browser. Nothing leaves the phone until you tap it.
+The easiest way is Wonderdesk Apphub: get it once from https://github.com/thoroftroy/App-Hub/releases, then install and update this app and the rest of the suite from there.
 
-Beacon only searches app names. It does not look through files or messages.
+Or download the APK from this repository's Releases, open it, and allow installing from that source if your phone asks. Needs Android 10 or newer.
 
 ## Look and feel
 
-Open About in the app to change the theme or motion. Aqua is the default.
+Every Wonderdesk app follows the look you pick in Control Room (Aqua, Bliss, Dark Bliss or Super). You can give this app its own look in its Settings.
+
+## Privacy
+
+Everything stays on your phone. No accounts, ads or tracking.
