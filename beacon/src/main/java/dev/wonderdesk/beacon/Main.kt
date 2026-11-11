@@ -15,6 +15,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -55,41 +57,95 @@ class MainActivity : WonderActivity() {
     @Composable override fun Content() = BeaconApp()
 }
 
-private const val ABOUT = "Beacon searches your whole phone from one box: apps, settings, contacts, file names and the words inside your documents and notes. " +
-    "It can also do quick sums and search the web when you ask. The file index is built and kept on this phone."
+private const val ABOUT = "Beacon is the front door to your phone: every app with folders and sorting, and one search box for apps, settings, contacts, files, the words inside files, sums, unit conversions and the web. " +
+    "The Wonderdesk Launcher uses Beacon for its search. The file index is built and kept on this phone."
 
-data class AppHit(val pkg: String, val label: String, val icon: ImageBitmap?, val aliases: List<String>)
+/* --------------------------------------------------- apps ------------------------------------------------- */
+
+data class AppHit(val key: String, val pkg: String, val component: android.content.ComponentName, val label: String, val icon: ImageBitmap?, val aliases: List<String>, val installed: Long, val category: Int)
 
 private fun loadApps(c: Context): List<AppHit> {
     val pm = c.packageManager
     val aliases = runCatching { SharedCatalog.aliases(c) }.getOrDefault(emptyMap())
-    return pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0).map { r ->
-        val pkg = r.activityInfo.packageName
-        AppHit(pkg, r.loadLabel(pm).toString(), runCatching { r.loadIcon(pm).toBitmap(96, 96).asImageBitmap() }.getOrNull(),
-            if (pkg.startsWith("dev.wonderdesk.")) aliases[pkg.substringAfterLast('.')].orEmpty() else emptyList())
-    }.distinctBy { it.pkg }.sortedBy { it.label.lowercase() }
+    val la = c.getSystemService(android.content.pm.LauncherApps::class.java)
+    return la.getActivityList(null, android.os.Process.myUserHandle()).map { ai ->
+        val pkg = ai.componentName.packageName
+        // Wonderdesk apps show their full artwork; others their own icon.
+        val art = if (pkg.startsWith("dev.wonderdesk.")) runCatching {
+            val res = pm.getResourcesForApplication(pkg)
+            val id = listOf("wonderdesk_${pkg.substringAfterLast('.')}_icon", "wonderdesk_icon").map { res.getIdentifier(it, "drawable", pkg) }.first { it != 0 }
+            android.graphics.BitmapFactory.decodeResource(res, id, android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 })?.let { android.graphics.Bitmap.createScaledBitmap(it, 144, (144f * it.height / it.width).toInt(), true).asImageBitmap() }
+        }.getOrNull() else null
+        AppHit(ai.componentName.flattenToShortString(), pkg, ai.componentName, ai.label.toString(), art ?: runCatching { ai.getIcon(c.resources.displayMetrics.densityDpi).toBitmap(144, 144).asImageBitmap() }.getOrNull(),
+            if (pkg.startsWith("dev.wonderdesk.")) aliases[pkg.substringAfterLast('.')].orEmpty() else emptyList(),
+            runCatching { pm.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L), ai.applicationInfo.category)
+    }.sortedBy { it.label.lowercase() }
 }
 
-private val SETTINGS = listOf(
-    Triple("Wi-Fi", "wifi wireless internet", Settings.ACTION_WIFI_SETTINGS), Triple("Bluetooth", "bluetooth pair headphones", Settings.ACTION_BLUETOOTH_SETTINGS),
-    Triple("Display", "brightness screen dark theme font", Settings.ACTION_DISPLAY_SETTINGS), Triple("Sound", "volume ringtone vibrate", Settings.ACTION_SOUND_SETTINGS),
-    Triple("Battery", "battery power saver", Intent.ACTION_POWER_USAGE_SUMMARY), Triple("Storage", "storage space free up", Settings.ACTION_INTERNAL_STORAGE_SETTINGS),
-    Triple("Apps", "apps applications uninstall permissions", Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS), Triple("Notifications", "notifications alerts", "android.settings.NOTIFICATION_SETTINGS"),
-    Triple("Location", "location gps", Settings.ACTION_LOCATION_SOURCE_SETTINGS), Triple("Security", "lock screen pin fingerprint", Settings.ACTION_SECURITY_SETTINGS),
-    Triple("Accessibility", "accessibility talkback", Settings.ACTION_ACCESSIBILITY_SETTINGS), Triple("Date and time", "date time zone", Settings.ACTION_DATE_SETTINGS),
-    Triple("Language", "language keyboard input", Settings.ACTION_LOCALE_SETTINGS), Triple("Mobile data", "data usage cellular sim", Settings.ACTION_DATA_USAGE_SETTINGS),
-    Triple("Airplane mode", "airplane flight", Settings.ACTION_AIRPLANE_MODE_SETTINGS), Triple("Developer options", "developer usb debugging", Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
-    Triple("About phone", "about model android version", Settings.ACTION_DEVICE_INFO_SETTINGS), Triple("Default apps", "default browser launcher home", Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
-)
+data class AppGroup(val id: String, val name: String, val apps: List<String>)
 
-data class Contact(val id: Long, val name: String, val phone: String?)
+/**
+ * App folders. With the Wonderdesk Launcher installed they're the same folders as its Launchpad
+ * (kept by the Launcher); otherwise Beacon keeps its own.
+ */
+object Folders {
+    private val URI = Uri.parse("content://dev.wonderdesk.launcher.apps")
+    fun shared(c: Context) = c.packageManager.resolveContentProvider("dev.wonderdesk.launcher.apps", 0) != null
+    private fun local(c: Context) = c.getSharedPreferences("beacon-folders", Context.MODE_PRIVATE)
 
-private fun contacts(c: Context, q: String): List<Contact> = runCatching {
-    c.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
-        "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ? OR ${ContactsContract.CommonDataKinds.Phone.NUMBER} LIKE ?", arrayOf("%$q%", "%$q%"), "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC")?.use { cur ->
-        buildList { while (cur.moveToNext() && size < 8) add(Contact(cur.getLong(0), cur.getString(1) ?: "", cur.getString(2))) }.distinctBy { it.id }
-    }.orEmpty()
-}.getOrDefault(emptyList())
+    fun groups(c: Context): List<AppGroup> = if (shared(c)) runCatching {
+        c.contentResolver.query(Uri.withAppendedPath(URI, "groups"), null, null, null, null)?.use { cur ->
+            buildList { while (cur.moveToNext()) add(AppGroup(cur.getString(0), cur.getString(1), JSONArray(cur.getString(2)).let { a -> (0 until a.length()).map { a.getString(it) } })) }
+        }
+    }.getOrNull().orEmpty() else runCatching {
+        JSONArray(local(c).getString("groups", "[]")).let { a -> (0 until a.length()).map { a.getJSONObject(it) }.map { o -> AppGroup(o.getString("id"), o.getString("name"), o.getJSONArray("apps").let { x -> (0 until x.length()).map { x.getString(it) } }) } }
+    }.getOrDefault(emptyList())
+
+    private fun saveLocal(c: Context, list: List<AppGroup>) = local(c).edit().putString("groups", JSONArray(list.map { g -> org.json.JSONObject().put("id", g.id).put("name", g.name).put("apps", JSONArray(g.apps)) }).toString()).apply()
+
+    private fun call(c: Context, method: String, arg: String?, extras: android.os.Bundle? = null) = runCatching { c.contentResolver.call(URI, method, arg, extras) }
+
+    fun addTo(c: Context, group: String, key: String) = if (shared(c)) call(c, "addToGroup", key, android.os.Bundle().apply { putString("group", group) }).let { }
+        else saveLocal(c, groups(c).map { g -> if (g.id == group) g.copy(apps = (g.apps + key).distinct()) else g.copy(apps = g.apps - key) }.filter { it.apps.isNotEmpty() })
+    fun create(c: Context, name: String, key: String) = if (shared(c)) call(c, "newGroup", key, android.os.Bundle().apply { putString("name", name) }).let { }
+        else saveLocal(c, groups(c).map { it.copy(apps = it.apps - key) }.filter { it.apps.isNotEmpty() } + AppGroup(java.util.UUID.randomUUID().toString(), name, listOf(key)))
+    fun takeOut(c: Context, key: String) = if (shared(c)) call(c, "removeFromGroups", key).let { } else saveLocal(c, groups(c).map { it.copy(apps = it.apps - key) }.filter { it.apps.isNotEmpty() })
+    fun rename(c: Context, group: String, name: String) = if (shared(c)) call(c, "renameGroup", name, android.os.Bundle().apply { putString("group", group) }).let { } else saveLocal(c, groups(c).map { if (it.id == group) it.copy(name = name) else it })
+    fun delete(c: Context, group: String) = if (shared(c)) call(c, "deleteGroup", group).let { } else saveLocal(c, groups(c).filter { it.id != group })
+    fun launches(c: Context): Map<String, Pair<Int, Long>> = if (shared(c)) runCatching {
+        c.contentResolver.query(Uri.withAppendedPath(URI, "launches"), null, null, null, null)?.use { cur -> buildMap { while (cur.moveToNext()) put(cur.getString(0), cur.getInt(1) to cur.getLong(2)) } }
+    }.getOrNull().orEmpty() else emptyMap()
+    fun recordLaunch(c: Context, key: String) { if (shared(c)) call(c, "recordLaunch", key) }
+    fun addToHome(c: Context, key: String): Boolean = shared(c) && call(c, "addToHome", key).isSuccess
+}
+
+private val SORTS = listOf("name" to "A to Z", "name_desc" to "Z to A", "used" to "Most used", "recent" to "Recently used", "installed" to "Newest", "category" to "By category")
+
+private fun categoryName(cat: Int) = when (cat) {
+    android.content.pm.ApplicationInfo.CATEGORY_GAME -> "Games"; android.content.pm.ApplicationInfo.CATEGORY_AUDIO -> "Music & audio"; android.content.pm.ApplicationInfo.CATEGORY_VIDEO -> "Video"
+    android.content.pm.ApplicationInfo.CATEGORY_IMAGE -> "Photos"; android.content.pm.ApplicationInfo.CATEGORY_SOCIAL -> "Social"; android.content.pm.ApplicationInfo.CATEGORY_NEWS -> "News"
+    android.content.pm.ApplicationInfo.CATEGORY_MAPS -> "Maps & travel"; android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY -> "Productivity"; else -> "Other"
+}
+
+private fun sorted(list: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>) = when (sort) {
+    "name_desc" -> list.sortedByDescending { it.label.lowercase() }
+    "used" -> list.sortedWith(compareByDescending<AppHit> { launches[it.key]?.first ?: 0 }.thenBy { it.label.lowercase() })
+    "recent" -> list.sortedWith(compareByDescending<AppHit> { launches[it.key]?.second ?: 0L }.thenBy { it.label.lowercase() })
+    "installed" -> list.sortedByDescending { it.installed }
+    "category" -> list.sortedWith(compareBy<AppHit> { categoryName(it.category) }.thenBy { it.label.lowercase() })
+    else -> list.sortedBy { it.label.lowercase() }
+}
+
+private fun appScore(a: AppHit, q: String): Int {
+    val t = q.trim().lowercase(); val n = a.label.lowercase()
+    return when {
+        n == t -> 1000; n.startsWith(t) -> 800 - n.length; n.split(' ', '-').any { it.startsWith(t) } -> 600 - n.length
+        a.aliases.any { it.lowercase().startsWith(t) } -> 550; t in n -> 400 - n.indexOf(t); a.aliases.any { t in it.lowercase() } -> 350
+        else -> { var i = 0; for (ch in n) if (i < t.length && ch == t[i]) i++; if (i == t.length && t.length >= 3) 100 else 0 }
+    }
+}
+
+/* -------------------------------------------------- screen ------------------------------------------------ */
 
 @Composable
 fun BeaconApp() {
@@ -97,23 +153,25 @@ fun BeaconApp() {
     val prefs = remember { context.prefs("beacon") }
     val index = remember { FileIndex(context) }
     val scope = rememberCoroutineScope()
+    var tab by rememberSaveable { mutableStateOf((context as? android.app.Activity)?.intent?.getStringExtra("tab") ?: prefs.getString("tab", "search") ?: "search") }
     var q by rememberSaveable { mutableStateOf("") }
     var apps by remember { mutableStateOf<List<AppHit>>(emptyList()) }
     var files by remember { mutableStateOf<List<FileIndex.Hit>>(emptyList()) }
     var inside by remember { mutableStateOf<List<FileIndex.Hit>>(emptyList()) }
-    var people by remember { mutableStateOf<List<Contact>>(emptyList()) }
+    var others by remember { mutableStateOf<List<Hit>>(emptyList()) }
     var indexing by remember { mutableStateOf<String?>(null) }
     var counts by remember { mutableStateOf(0 to 0) }
     var history by remember { mutableStateOf(runCatching { JSONArray(prefs.getString("history", "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())) }
+    val resumed = rememberIsResumed()
     var allFiles by remember { mutableStateOf(android.os.Environment.isExternalStorageManager()) }
     var contactsOk by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
     val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { contactsOk = it }
+    var filesGuide by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-    DisposableEffect(owner) {
-        val o = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) allFiles = android.os.Environment.isExternalStorageManager() }
-        owner.lifecycle.addObserver(o); onDispose { owner.lifecycle.removeObserver(o) }
-    }
+    var groups by remember { mutableStateOf<List<AppGroup>>(emptyList()) }
+    var launches by remember { mutableStateOf<Map<String, Pair<Int, Long>>>(emptyMap()) }
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(resumed) { if (resumed) { allFiles = android.os.Environment.isExternalStorageManager(); tick++ } }
     fun reindex() {
         if (indexing != null || !allFiles) return
         indexing = "Starting…"
@@ -126,22 +184,29 @@ fun BeaconApp() {
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { loadApps(context) }
         counts = withContext(Dispatchers.IO) { index.count() }
-        runCatching { delay(200); focus.requestFocus() }
+        if (tab == "search") runCatching { delay(200); focus.requestFocus() }
     }
+    LaunchedEffect(tick) { groups = withContext(Dispatchers.IO) { Folders.groups(context) }; launches = withContext(Dispatchers.IO) { Folders.launches(context) } }
     LaunchedEffect(allFiles) { if (allFiles && System.currentTimeMillis() - index.lastIndexed() > 6 * 3_600_000L) reindex() }
     LaunchedEffect(q) {
         val term = q.trim()
-        if (term.length < 2) { files = emptyList(); inside = emptyList(); people = emptyList(); return@LaunchedEffect }
-        delay(150)
-        files = withContext(Dispatchers.IO) { runCatching { index.byName(term) }.getOrDefault(emptyList()) }
-        inside = withContext(Dispatchers.IO) { runCatching { index.inside(term) }.getOrDefault(emptyList()) }
-        if (contactsOk) people = withContext(Dispatchers.IO) { contacts(context, term) }
+        if (term.isEmpty()) { files = emptyList(); inside = emptyList(); others = emptyList(); return@LaunchedEffect }
+        delay(120)
+        others = withContext(Dispatchers.IO) { (listOfNotNull(Engine.convert(term), Engine.math(term)) + Engine.settings(term) + Engine.contacts(context, term)).sortedByDescending { it.score } }
+        if (term.length >= 2) {
+            files = withContext(Dispatchers.IO) { runCatching { index.byName(term) }.getOrDefault(emptyList()) }
+            inside = withContext(Dispatchers.IO) { runCatching { index.inside(term) }.getOrDefault(emptyList()) }
+        }
     }
     fun remember(term: String) {
         val t = term.trim(); if (t.length < 2) return
         history = (listOf(t) + history.filter { it != t }).take(12); prefs.edit().putString("history", JSONArray(history).toString()).apply()
     }
+    fun open(a: AppHit) { context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) {}; Folders.recordLaunch(context, a.key) }
     WonderApp(appName = "Beacon", about = ABOUT,
+        tabs = listOf(WonderTab("search", "Search", WonderIcons.Search), WonderTab("apps", "All apps", WonderIcons.Apps)),
+        selectedTab = tab, onTab = { tab = it; prefs.edit().putString("tab", it).apply() },
+        title = if (tab == "apps") "All apps" else "Beacon",
         settings = {
             var contents by remember { mutableStateOf(prefs.getBoolean("contents", true)) }
             Panel(title = "Search", footer = "Beacon reads text files to find words inside them: notes, Markdown, code, subtitles, spreadsheets saved as CSV and more. The index stays on this phone.") {
@@ -151,12 +216,21 @@ fun BeaconApp() {
                 PanelDivider()
                 ListRow("Clear search history", icon = WonderIcons.DeleteSweep, tint = Color(0xFF7A7F87), onClick = { history = emptyList(); prefs.edit().remove("history").apply() })
             }
+            Panel(title = "Everywhere", footer = "Add Beacon's tile to Quick Settings (swipe down twice, tap the pencil) or its search bar widget to the home screen. The Wonderdesk Launcher's search uses Beacon automatically.") {
+                ListRow(if (Folders.shared(context)) "Folders shared with Wonderdesk Launcher" else "Install Wonderdesk Launcher to share folders", icon = WonderIcons.Apps, tint = Color(0xFF16A085))
+            }
         }) {
         val p = wonderPalette()
         val toast = LocalToast.current
+        if (filesGuide) AccessGuide(SpecialAccess.Kind.ALL_FILES, "Beacon uses it to find documents by name and by the words inside them. The index never leaves your phone.", onDismiss = { filesGuide = false }, onGranted = { allFiles = true })
+        if (tab == "apps") { AllApps(apps, groups, launches, onOpen = ::open, onChanged = { tick++ }); return@WonderApp }
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.padding(16.dp, 12.dp, 16.dp, 8.dp)) {
-                SearchFieldFocus(q, { q = it }, "Search apps, files, words, contacts…", focus) { remember(q); results(context, q, apps, files).firstOrNull()?.invoke() }
+                SearchFieldFocus(q, { q = it }, "Search apps, settings, files, sums…", focus) {
+                    remember(q)
+                    val top = apps.maxByOrNull { appScore(it, q) }?.takeIf { appScore(it, q) > 0 }
+                    when { top != null -> open(top); others.firstOrNull() != null -> others.first().intent?.let { context.launchSafely(it) {} }; files.isNotEmpty() -> openFile(context, File(files.first().path)) }
+                }
             }
             indexing?.let { Row(Modifier.padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = p.accent); Spacer(Modifier.width(8.dp))
@@ -167,52 +241,58 @@ fun BeaconApp() {
                 if (term.isEmpty()) {
                     if (!allFiles) item {
                         Panel(Modifier.padding(bottom = 14.dp)) { ListRow("Search your files too", subtitle = "Allow all files access so Beacon can find documents by name and by the words inside them",
-                            icon = WonderIcons.FolderOpen, tint = Color(0xFF4A90E2), chevron = true, onClick = {
-                                context.launchSafely(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))) {} }) }
+                            icon = WonderIcons.FolderOpen, tint = Color(0xFF4A90E2), chevron = true, onClick = { filesGuide = true }) }
                     }
                     if (history.isNotEmpty()) {
                         item { SectionLabel("Recent searches", Modifier.padding(start = 6.dp, bottom = 6.dp)) }
                         item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 16.dp)) { items(history) { h -> Chip(h, false, { q = h }, WonderIcons.History) } } }
                     }
-                    item { SectionLabel("Apps", Modifier.padding(start = 6.dp, bottom = 6.dp)) }
+                    item { SectionLabel(if (launches.isEmpty()) "Wonderdesk apps" else "Most used", Modifier.padding(start = 6.dp, bottom = 6.dp)) }
                     item {
-                        val recent = remember(apps) { prefs.getString("launched", "")!!.split(',').filter { it.isNotBlank() }.mapNotNull { pk -> apps.find { it.pkg == pk } }.ifEmpty { apps.filter { it.pkg.startsWith("dev.wonderdesk.") } }.take(8) }
-                        Panel { Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            recent.take(4).forEach { a -> AppTile(a) { launch(context, a.pkg, prefs) } }
-                        } ; if (recent.size > 4) Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) { recent.drop(4).forEach { a -> AppTile(a) { launch(context, a.pkg, prefs) } } } }
+                        val top = remember(apps, launches) { if (launches.isEmpty()) apps.filter { it.pkg.startsWith("dev.wonderdesk.") }.take(8) else sorted(apps, "used", launches).take(8) }
+                        Panel { top.chunked(4).forEach { row -> Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) { row.forEach { a -> AppTile(a) { open(a) } }; repeat(4 - row.size) { Spacer(Modifier.width(76.dp)) } } } }
                     }
-                    item { Text("%,d files indexed. Beacon finds words inside %,d documents.".format(counts.first, counts.second), Modifier.fillMaxWidth().padding(top = 18.dp),
+                    item { Text("Try a sum like 15% of 80, a conversion like 5 km in miles, or any word inside your files.", Modifier.fillMaxWidth().padding(top = 18.dp),
+                        textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = p.secondaryText) }
+                    item { Text("%,d files indexed. Beacon finds words inside %,d documents.".format(counts.first, counts.second), Modifier.fillMaxWidth().padding(top = 6.dp),
                         textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = p.secondaryText) }
                     return@LazyColumn
                 }
-                // calculator
-                val calc = runCatching { Expression.format(Expression.evaluate(term)) }.getOrNull()?.takeIf { term.any { c -> c in "+-*/^()" } }
-                if (calc != null) item {
-                    Panel(Modifier.padding(bottom = 14.dp)) { ListRow("= $calc", subtitle = term, icon = WonderIcons.Calculate, tint = Color(0xFFE67E22), trailing = {
-                        IconButton(onClick = { context.copyText("Result", calc); toast("Copied $calc") }) { Icon(WonderIcons.ContentCopy, "Copy") } }) }
+                others.filter { it.kind == "math" || it.kind == "convert" }.forEach { h ->
+                    item {
+                        Panel(Modifier.padding(bottom = 14.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(h.subtitle, style = MaterialTheme.typography.bodyMedium, color = p.secondaryText)
+                                    Text(h.title, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold))
+                                }
+                                IconButton(onClick = { context.copyText("Result", h.title); toast("Copied ${h.title}") }) { Icon(WonderIcons.ContentCopy, "Copy") }
+                            }
+                        }
+                    }
                 }
-                val appHits = apps.filter { a -> a.label.contains(term, true) || a.aliases.any { it.contains(term, true) } }
-                    .sortedWith(compareByDescending<AppHit> { it.label.startsWith(term, true) }.thenBy { it.label.length }).take(6)
+                val appHits = apps.map { it to appScore(it, term) }.filter { it.second > 0 }.sortedByDescending { it.second + (launches[it.first.key]?.first ?: 0).coerceAtMost(50) }.map { it.first }.take(8)
                 if (appHits.isNotEmpty()) {
                     item { SectionLabel("Apps", Modifier.padding(start = 6.dp, bottom = 6.dp)) }
-                    itemsIndexed(appHits, key = { _, a -> "a" + a.pkg }) { i, a ->
+                    itemsIndexed(appHits, key = { _, a -> "a" + a.key }) { i, a ->
                         ListRow(a.label, Modifier.panelItem(i, appHits.size), subtitle = a.aliases.firstOrNull { it.contains(term, true) && !a.label.contains(term, true) }?.let { "Also known as $it" },
-                            leading = { a.icon?.let { Image(it, null, Modifier.size(36.dp)) } }, onClick = { remember(term); launch(context, a.pkg, prefs) })
+                            leading = { a.icon?.let { Image(it, null, Modifier.size(36.dp)) } }, onClick = { remember(term); open(a) })
                     }
                     item { Spacer(Modifier.height(14.dp)) }
                 }
-                val settingHits = SETTINGS.filter { it.first.contains(term, true) || it.second.contains(term.lowercase()) }.take(4)
+                val settingHits = others.filter { it.kind == "setting" }
                 if (settingHits.isNotEmpty()) {
                     item { SectionLabel("Settings", Modifier.padding(start = 6.dp, bottom = 6.dp)) }
-                    itemsIndexed(settingHits) { i, (name, _, action) -> ListRow(name, Modifier.panelItem(i, settingHits.size), icon = WonderIcons.Settings, tint = Color(0xFF7A7F87), chevron = true,
-                        onClick = { remember(term); context.launchSafely(Intent(action)) { toast(it) } }) }
+                    itemsIndexed(settingHits) { i, h -> ListRow(h.title, Modifier.panelItem(i, settingHits.size), icon = WonderIcons.Settings, tint = Color(0xFF7A7F87), chevron = true,
+                        onClick = { remember(term); h.intent?.let { context.launchSafely(it) { m -> toast(m) } } }) }
                     item { Spacer(Modifier.height(14.dp)) }
                 }
+                val people = others.filter { it.kind == "contact" }
                 if (people.isNotEmpty()) {
                     item { SectionLabel("Contacts", Modifier.padding(start = 6.dp, bottom = 6.dp)) }
-                    itemsIndexed(people) { i, c -> ListRow(c.name, Modifier.panelItem(i, people.size), subtitle = c.phone, icon = WonderIcons.Person, tint = Color(0xFF16A085),
-                        trailing = { c.phone?.let { ph -> IconButton(onClick = { context.launchSafely(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$ph"))) {} }) { Icon(WonderIcons.Phone, "Call", tint = Color(0xFF2E9E44)) } } },
-                        onClick = { context.launchSafely(Intent(Intent.ACTION_VIEW, Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, c.id.toString()))) {} }) }
+                    itemsIndexed(people) { i, c -> ListRow(c.title, Modifier.panelItem(i, people.size), subtitle = c.subtitle, icon = WonderIcons.Person, tint = Color(0xFF16A085),
+                        trailing = { if (c.subtitle.isNotBlank()) IconButton(onClick = { context.launchSafely(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.subtitle}"))) {} }) { Icon(WonderIcons.Phone, "Call", tint = Color(0xFF2E9E44)) } },
+                        onClick = { c.intent?.let { context.launchSafely(it) {} } }) }
                     item { Spacer(Modifier.height(14.dp)) }
                 } else if (!contactsOk) item {
                     Text("Search contacts too", Modifier.clickable { askContacts.launch(Manifest.permission.READ_CONTACTS) }.padding(6.dp), color = p.accent, style = MaterialTheme.typography.labelLarge)
@@ -231,31 +311,95 @@ fun BeaconApp() {
                     Panel { ListRow("Search the web for “$term”", subtitle = "Opens DuckDuckGo in your browser", icon = WonderIcons.TravelExplore, tint = Color(0xFFDE5833), chevron = true,
                         onClick = { remember(term); context.launchSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://duckduckgo.com/?q=" + Uri.encode(term)))) { toast(it) } }) }
                 }
-                if (appHits.isEmpty() && files.isEmpty() && inside.isEmpty() && settingHits.isEmpty() && calc == null && people.isEmpty())
-                    item { Text("Nothing on this phone matches “$term”.", Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center, color = p.secondaryText) }
             }
         }
     }
 }
 
-/** The first result, for the keyboard's search key. */
-private fun results(c: Context, q: String, apps: List<AppHit>, files: List<FileIndex.Hit>): List<() -> Unit> {
-    val t = q.trim()
-    return listOfNotNull(apps.firstOrNull { it.label.startsWith(t, true) }?.let { a -> { launch(c, a.pkg, c.prefs("beacon")) } },
-        files.firstOrNull()?.let { h -> { openFile(c, File(h.path)) } })
+/** Every app, with folders (shared with the Launcher's Launchpad) and six ways to sort. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun AllApps(apps: List<AppHit>, groups: List<AppGroup>, launches: Map<String, Pair<Int, Long>>, onOpen: (AppHit) -> Unit, onChanged: () -> Unit) {
+    val context = LocalContext.current
+    val p = wonderPalette()
+    val toast = LocalToast.current
+    val prefs = remember { context.prefs("beacon") }
+    var sort by remember { mutableStateOf(prefs.getString("sort", "name") ?: "name") }
+    var filter by remember { mutableStateOf("") }
+    var openGroup by remember { mutableStateOf<AppGroup?>(null) }
+    var menuFor by remember { mutableStateOf<AppHit?>(null) }
+    var newFolderFor by remember { mutableStateOf<AppHit?>(null) }
+    val inGroups = groups.flatMap { it.apps }.toSet()
+    val loose = remember(apps, sort, launches, inGroups, filter) { sorted(apps.filter { it.key !in inGroups && (filter.isBlank() || appScore(it, filter) > 0) }, sort, launches) }
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.padding(16.dp, 12.dp, 16.dp, 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SearchField(filter, { filter = it }, "Filter apps")
+            Row(Modifier.fillMaxWidth().horizontalScrollCompat(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SORTS.forEach { (id, name) -> Chip(name, sort == id, { sort = id; prefs.edit().putString("sort", id).apply() }) }
+            }
+        }
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(88.dp), Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+            if (filter.isBlank()) items(groups.size, key = { "g" + groups[it].id }) { i ->
+                val g = groups[i]
+                Column(Modifier.padding(4.dp).clip(RoundedCornerShape(12.dp)).clickable { openGroup = g }.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(p.selection.copy(alpha = .15f)).padding(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            g.apps.mapNotNull { k -> apps.find { it.key == k } }.take(4).chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { row.forEach { a -> a.icon?.let { Image(it, null, Modifier.size(20.dp)) } } } }
+                        }
+                    }
+                    Text(g.name, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                }
+            }
+            items(loose.size, key = { "a" + loose[it].key }) { i -> val a = loose[i]; AppGridTile(a, onClick = { onOpen(a) }, onLong = { menuFor = a }) }
+        }
+    }
+    openGroup?.let { g ->
+        val live = groups.find { it.id == g.id } ?: g
+        var renaming by remember { mutableStateOf(false) }
+        WonderDialog(onDismissRequest = { openGroup = null }, title = { Text(live.name, Modifier.clickable { renaming = true }) }, text = {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(84.dp), Modifier.heightIn(max = 460.dp)) {
+                val list = sorted(live.apps.mapNotNull { k -> apps.find { it.key == k } }, sort, launches)
+                items(list.size) { i -> val a = list[i]; AppGridTile(a, onClick = { openGroup = null; onOpen(a) }, onLong = { menuFor = a }) }
+            }
+        }, confirmButton = { TextButton(onClick = { openGroup = null }) { Text("Close") } }, dismissButton = { TextButton(onClick = { Folders.delete(context, live.id); openGroup = null; onChanged() }) { Text("Delete folder", color = p.danger) } })
+        if (renaming) InputDialog("Rename folder", "Name", initial = live.name, onDismiss = { renaming = false }) { Folders.rename(context, live.id, it); onChanged() }
+    }
+    menuFor?.let { a ->
+        val current = groups.find { a.key in it.apps }
+        WonderDialog(onDismissRequest = { menuFor = null }, title = { Text(a.label) }, text = {
+            Column(Modifier.verticalScrollCompat()) {
+                Panel {
+                    ListRow("Open", icon = WonderIcons.OpenInNew, onClick = { menuFor = null; onOpen(a) }); PanelDivider()
+                    if (Folders.shared(context)) { ListRow("Add to home screen", icon = WonderIcons.Home, tint = Color(0xFF2E9E44), onClick = { menuFor = null; if (Folders.addToHome(context, a.key)) toast("Added to your home screen") }); PanelDivider() }
+                    groups.filter { it.id != current?.id }.forEach { g -> ListRow("Move to “${g.name}”", icon = WonderIcons.Folder, tint = Color(0xFF4A90E2), onClick = { menuFor = null; Folders.addTo(context, g.id, a.key); onChanged() }); PanelDivider() }
+                    ListRow("New folder with this app", icon = WonderIcons.CreateNewFolder, tint = Color(0xFF4A90E2), onClick = { menuFor = null; newFolderFor = a }); PanelDivider()
+                    if (current != null) { ListRow("Take out of “${current.name}”", icon = WonderIcons.FolderOpen, tint = Color(0xFF7A7F87), onClick = { menuFor = null; Folders.takeOut(context, a.key); onChanged() }); PanelDivider() }
+                    ListRow("App info", icon = WonderIcons.Info, tint = Color(0xFF7A7F87), onClick = { menuFor = null; context.launchSafely(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${a.pkg}"))) {} }); PanelDivider()
+                    ListRow("Uninstall", icon = WonderIcons.Delete, danger = true, onClick = { menuFor = null; context.launchSafely(Intent(Intent.ACTION_DELETE, Uri.parse("package:${a.pkg}"))) {} })
+                }
+            }
+        }, confirmButton = { TextButton(onClick = { menuFor = null }) { Text("Close") } })
+    }
+    newFolderFor?.let { a -> InputDialog("New folder", "Folder name", confirm = "Create", onDismiss = { newFolderFor = null }) { n -> Folders.create(context, n, a.key); onChanged() } }
 }
 
-private fun launch(c: Context, pkg: String, prefs: android.content.SharedPreferences) {
-    c.packageManager.getLaunchIntentForPackage(pkg)?.let { c.launchSafely(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {} }
-    val list = (listOf(pkg) + prefs.getString("launched", "")!!.split(',').filter { it.isNotBlank() && it != pkg }).take(8)
-    prefs.edit().putString("launched", list.joinToString(",")).apply()
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun AppGridTile(a: AppHit, onClick: () -> Unit, onLong: () -> Unit) {
+    Column(Modifier.padding(4.dp).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick, onLongClick = onLong).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        a.icon?.let { Image(it, null, Modifier.size(56.dp)) }
+        Text(a.label, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    }
 }
+
+@Composable private fun Modifier.horizontalScrollCompat() = this.horizontalScroll(androidx.compose.foundation.rememberScrollState())
+@Composable private fun Modifier.verticalScrollCompat() = this.verticalScroll(androidx.compose.foundation.rememberScrollState())
 
 @Composable
 private fun AppTile(a: AppHit, onClick: () -> Unit) {
     Column(Modifier.width(76.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         a.icon?.let { Image(it, null, Modifier.size(48.dp)) }
-        Text(a.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(a.label, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 
@@ -307,7 +451,7 @@ private fun FileRow(h: FileIndex.Hit, modifier: Modifier, term: String, onOpen: 
 
 private fun mime(f: File) = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "*/*"
 
-private fun showInWayfinder(c: Context, path: String) {
+internal fun showInWayfinder(c: Context, path: String) {
     c.launchSafely(Intent("dev.wonderdesk.wayfinder.SHOW").setPackage("dev.wonderdesk.wayfinder").putExtra("path", path).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {
         c.launchSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/thoroftroy/Wayfinder/releases"))) {}
     }
@@ -319,7 +463,7 @@ private fun openWith(c: Context, f: File, pkg: String, type: String) {
     c.launchSafely(i) { openFile(c, f) }
 }
 
-private fun openFile(c: Context, f: File) {
+internal fun openFile(c: Context, f: File) {
     val uri = FileProvider.getUriForFile(c, "${c.packageName}.files", f)
     val ext = f.extension.lowercase()
     val preferred = when {

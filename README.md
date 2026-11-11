@@ -6,7 +6,9 @@ Search your whole phone from one box.
 
 - Finds apps (including Wonderdesk nicknames, such as "files" for Wayfinder), settings pages, contacts, files by name, and **words inside files**: notes, Markdown, text, code, subtitles and CSV files.
 - Results show where each file lives. Open it in the right app, show it in Wayfinder, or edit it in Scribble.
-- Type a sum like `12*7+3` for a quick answer, or search the web when you ask.
+- Type a sum like `12*7+3` or a conversion like `5 km in miles` for a quick answer, or search the web when you ask.
+- An **All apps** tab works as a Launchpad, with folders shared with Wonderdesk Launcher and six sort orders.
+- A Quick Settings tile and a home-screen search widget. Other Wonderdesk apps use Beacon for their search too.
 - The file index is built and kept on your phone and updates by itself. Needs Android's all-files access for file search.
 
 ## Install and update
