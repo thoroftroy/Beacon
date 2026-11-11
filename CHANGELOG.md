@@ -1,5 +1,15 @@
 # Beacon changelog
 
+## v0.5.0
+
+- New Launchpad: every app over a dimmed, blurred wallpaper, with shared folders, six sort orders, hidden apps, and Beacon search for apps, sums, conversions, settings, contacts and files
+- Hold an app in Launchpad to add it to the home screen or Dock, move it into a folder, hide it, see its info or uninstall it
+- Search widget settings: dark bar, show or hide the All apps button, your own placeholder text. Tapping it opens Launchpad ready to type
+- The Quick Settings tile opens Launchpad search
+- Works properly in landscape: tabs move to a rail at the side so the content keeps its height, and screens that ran out of room now scroll
+- If the app ever crashes it says so next time it opens and offers to send a report (only the error, app version and phone model, with file names and links removed). Turn on automatic sending in Control Room › Wonderdesk
+- Lists can no longer crash when two items share a name
+
 ## v0.4.0
 
 - Beacon is now also the Launchpad: an All apps tab with folders shared with the launcher and six sort orders

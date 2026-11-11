@@ -64,7 +64,7 @@ private const val ABOUT = "Beacon is the front door to your phone: every app wit
 
 data class AppHit(val key: String, val pkg: String, val component: android.content.ComponentName, val label: String, val icon: ImageBitmap?, val aliases: List<String>, val installed: Long, val category: Int)
 
-private fun loadApps(c: Context): List<AppHit> {
+internal fun loadApps(c: Context): List<AppHit> {
     val pm = c.packageManager
     val aliases = runCatching { SharedCatalog.aliases(c) }.getOrDefault(emptyMap())
     val la = c.getSystemService(android.content.pm.LauncherApps::class.java)
@@ -116,18 +116,28 @@ object Folders {
         c.contentResolver.query(Uri.withAppendedPath(URI, "launches"), null, null, null, null)?.use { cur -> buildMap { while (cur.moveToNext()) put(cur.getString(0), cur.getInt(1) to cur.getLong(2)) } }
     }.getOrNull().orEmpty() else emptyMap()
     fun recordLaunch(c: Context, key: String) { if (shared(c)) call(c, "recordLaunch", key) }
-    fun addToHome(c: Context, key: String): Boolean = shared(c) && call(c, "addToHome", key).isSuccess
+    fun addToHome(c: Context, key: String): Boolean = shared(c) && call(c, "addToHome", key).getOrNull()?.getBoolean("ok", true) == true
+    fun addToDock(c: Context, key: String): Boolean = shared(c) && call(c, "addToDock", key).getOrNull()?.getBoolean("ok", true) == true
+    private fun keys(c: Context, path: String): Set<String> = runCatching {
+        c.contentResolver.query(Uri.withAppendedPath(URI, path), null, null, null, null)?.use { cur -> buildSet { while (cur.moveToNext()) add(cur.getString(0)) } }
+    }.getOrNull().orEmpty()
+    fun hidden(c: Context): Set<String> = if (shared(c)) keys(c, "hidden") else local(c).getStringSet("hidden", emptySet())!!.toSet()
+    fun dock(c: Context): Set<String> = if (shared(c)) keys(c, "dock") else emptySet()
+    fun hide(c: Context, key: String, hide: Boolean) { if (shared(c)) call(c, if (hide) "hide" else "unhide", key) else local(c).edit().putStringSet("hidden", if (hide) hidden(c) + key else hidden(c) - key).apply() }
+    fun foldersFirst(c: Context): Boolean = !shared(c) || runCatching { c.contentResolver.query(Uri.withAppendedPath(URI, "settings"), null, null, null, null)?.use { if (it.moveToFirst() && it.columnCount > 1) it.getInt(1) == 1 else true } }.getOrNull() ?: true
+    fun sort(c: Context): String? = if (shared(c)) runCatching { c.contentResolver.query(Uri.withAppendedPath(URI, "settings"), null, null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } }.getOrNull() else null
+    fun setSort(c: Context, sort: String) { if (shared(c)) call(c, "setSort", sort) }
 }
 
-private val SORTS = listOf("name" to "A to Z", "name_desc" to "Z to A", "used" to "Most used", "recent" to "Recently used", "installed" to "Newest", "category" to "By category")
+internal val SORTS = listOf("name" to "A to Z", "name_desc" to "Z to A", "used" to "Most used", "recent" to "Recently used", "installed" to "Newest", "category" to "By category")
 
-private fun categoryName(cat: Int) = when (cat) {
+internal fun categoryName(cat: Int) = when (cat) {
     android.content.pm.ApplicationInfo.CATEGORY_GAME -> "Games"; android.content.pm.ApplicationInfo.CATEGORY_AUDIO -> "Music & audio"; android.content.pm.ApplicationInfo.CATEGORY_VIDEO -> "Video"
     android.content.pm.ApplicationInfo.CATEGORY_IMAGE -> "Photos"; android.content.pm.ApplicationInfo.CATEGORY_SOCIAL -> "Social"; android.content.pm.ApplicationInfo.CATEGORY_NEWS -> "News"
     android.content.pm.ApplicationInfo.CATEGORY_MAPS -> "Maps & travel"; android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY -> "Productivity"; else -> "Other"
 }
 
-private fun sorted(list: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>) = when (sort) {
+internal fun sorted(list: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>) = when (sort) {
     "name_desc" -> list.sortedByDescending { it.label.lowercase() }
     "used" -> list.sortedWith(compareByDescending<AppHit> { launches[it.key]?.first ?: 0 }.thenBy { it.label.lowercase() })
     "recent" -> list.sortedWith(compareByDescending<AppHit> { launches[it.key]?.second ?: 0L }.thenBy { it.label.lowercase() })
@@ -136,7 +146,7 @@ private fun sorted(list: List<AppHit>, sort: String, launches: Map<String, Pair<
     else -> list.sortedBy { it.label.lowercase() }
 }
 
-private fun appScore(a: AppHit, q: String): Int {
+internal fun appScore(a: AppHit, q: String): Int {
     val t = q.trim().lowercase(); val n = a.label.lowercase()
     return when {
         n == t -> 1000; n.startsWith(t) -> 800 - n.length; n.split(' ', '-').any { it.startsWith(t) } -> 600 - n.length
