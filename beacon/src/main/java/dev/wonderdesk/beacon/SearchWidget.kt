@@ -12,7 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import dev.wonderdesk.shared.*
 
-/** A search bar on the home screen: tap to search everything, or All apps for the Launchpad. */
+/** A search bar on the home screen: tap to search everything, or All apps. */
 class SearchWidget : AppWidgetProvider() {
     companion object {
         fun build(c: Context, id: Int): RemoteViews {
@@ -44,7 +44,7 @@ class SearchWidgetSetup : WidgetSetupActivity() {
         WidgetSetup("Beacon", "Search widget", onCancel = { finish() }, onSave = { s.put("dark" to dark, "apps" to apps, "hint" to hint); save() }) {
             Panel {
                 SwitchRow("Dark bar", dark, { dark = it }); PanelDivider()
-                SwitchRow("All apps button", apps, { apps = it }, subtitle = "Opens the Launchpad")
+                SwitchRow("All apps button", apps, { apps = it }, subtitle = "Opens all your apps")
             }
             Field(hint, { hint = it.take(40) }, "Placeholder text (optional)", supporting = "Shown in the bar before you tap it")
         }

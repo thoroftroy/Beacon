@@ -163,7 +163,7 @@ fun BeaconApp() {
     val prefs = remember { context.prefs("beacon") }
     val index = remember { FileIndex(context) }
     val scope = rememberCoroutineScope()
-    var tab by rememberSaveable { mutableStateOf((context as? android.app.Activity)?.intent?.getStringExtra("tab") ?: prefs.getString("tab", "search") ?: "search") }
+    val tab = "search"
     var q by rememberSaveable { mutableStateOf("") }
     var apps by remember { mutableStateOf<List<AppHit>>(emptyList()) }
     var files by remember { mutableStateOf<List<FileIndex.Hit>>(emptyList()) }
@@ -214,9 +214,7 @@ fun BeaconApp() {
     }
     fun open(a: AppHit) { context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) {}; Folders.recordLaunch(context, a.key) }
     WonderApp(appName = "Beacon", about = ABOUT,
-        tabs = listOf(WonderTab("search", "Search", WonderIcons.Search), WonderTab("apps", "All apps", WonderIcons.Apps)),
-        selectedTab = tab, onTab = { tab = it; prefs.edit().putString("tab", it).apply() },
-        title = if (tab == "apps") "All apps" else "Beacon",
+        title = "Beacon search",
         settings = {
             var contents by remember { mutableStateOf(prefs.getBoolean("contents", true)) }
             Panel(title = "Search", footer = "Beacon reads text files to find words inside them: notes, Markdown, code, subtitles, spreadsheets saved as CSV and more. The index stays on this phone.") {
@@ -233,7 +231,7 @@ fun BeaconApp() {
         val p = wonderPalette()
         val toast = LocalToast.current
         if (filesGuide) AccessGuide(SpecialAccess.Kind.ALL_FILES, "Beacon uses it to find documents by name and by the words inside them. The index never leaves your phone.", onDismiss = { filesGuide = false }, onGranted = { allFiles = true })
-        if (tab == "apps") { AllApps(apps, groups, launches, onOpen = ::open, onChanged = { tick++ }); return@WonderApp }
+
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.padding(16.dp, 12.dp, 16.dp, 8.dp)) {
                 SearchFieldFocus(q, { q = it }, "Search apps, settings, files, sums…", focus) {

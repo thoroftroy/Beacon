@@ -1,5 +1,11 @@
 # Beacon changelog
 
+## v0.5.1
+
+- Beacon's icon opens straight to all your apps with search, folders and sorting. Search settings and the file index are under ⋮
+- Much faster and smoother: the app is now built optimised (the way Play Store apps are), so screens open quicker, scrolling is fluid and the APK is about a quarter of the size
+- Screens and lists no longer decode pictures on the main thread, and skip redrawing parts that didn't change
+
 ## v0.5.0
 
 - New Launchpad: every app over a dimmed, blurred wallpaper, with shared folders, six sort orders, hidden apps, and Beacon search for apps, sums, conversions, settings, contacts and files

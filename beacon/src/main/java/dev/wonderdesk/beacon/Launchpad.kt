@@ -66,7 +66,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Beacon as the Launchpad: every app over a dimmed, blurred wallpaper, with folders (shared with the
+ * Beacon itself (what its icon opens): every app over a dimmed, blurred wallpaper, with folders (shared with the
  * Wonderdesk Launcher), six sort orders and the whole of Beacon search. The launcher's swipe up, Dock button
  * and search open this. Leaving it (opening an app, Home, Back, swiping down) closes it, so it always opens fresh.
  */
@@ -195,7 +195,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                             trailingIcon = if (id == sort) ({ Icon(WonderIcons.Check, null) }) else null) }
                         HorizontalDivider()
                         DropdownMenuItem({ Text(if (hidden.isEmpty()) "No hidden apps" else "Hidden apps (${hidden.size})") }, { sortMenu = false; showHidden = true }, enabled = hidden.isNotEmpty(), leadingIcon = { Icon(WonderIcons.VisibilityOff, null) })
-                        DropdownMenuItem({ Text("Open Beacon") }, { sortMenu = false; context.launchSafely(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {}; onClose() }, leadingIcon = { Icon(WonderIcons.Search, null) })
+                        DropdownMenuItem({ Text("Search settings and file index") }, { sortMenu = false; context.launchSafely(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {}; onClose() }, leadingIcon = { Icon(WonderIcons.Settings, null) })
                     }
                 }
             }
@@ -215,7 +215,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     newFolderFor?.let { a -> InputDialog("New folder", "Folder name", confirm = "Create", onDismiss = { newFolderFor = null }) { n -> scope.launch(Dispatchers.IO) { Folders.create(context, n.ifBlank { "Folder" }, a.key); withContext(Dispatchers.Main) { tick++ } } } }
     if (showHidden) WonderDialog(onDismissRequest = { showHidden = false }, title = { Text("Hidden apps") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("Hidden apps stay installed. They don't show in Launchpad but still come up when you search for them.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
+            Text("Hidden apps stay installed. They don't show in the grid but still come up when you search for them.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
             Spacer(Modifier.height(8.dp))
             Panel { apps.filter { it.key in hidden }.forEachIndexed { i, a ->
                 if (i > 0) PanelDivider()
@@ -289,13 +289,13 @@ private fun AppMenu(a: AppHit, groups: List<AppGroup>, onDismiss: () -> Unit, on
                         onDismiss(); scope.launch { val ok = withContext(Dispatchers.IO) { Folders.addToHome(context, a.key) }; say(if (ok) "Added to your home screen" else "No room on that home screen page") }
                     }); PanelDivider()
                     ListRow("Add to Dock", icon = WonderIcons.Dashboard, tint = Color(0xFF16A085), onClick = {
-                        onDismiss(); scope.launch { val ok = withContext(Dispatchers.IO) { Folders.addToDock(context, a.key) }; say(if (ok) "Added to the Dock" else "The Dock holds 7 apps") }
+                        onDismiss(); scope.launch { val ok = withContext(Dispatchers.IO) { Folders.addToDock(context, a.key) }; say(if (ok) "Added to the Dock" else "The Dock holds 8 apps") }
                     }); PanelDivider()
                 }
                 groups.filter { it.id != current?.id }.forEach { g -> ListRow("Move to “${g.name}”", icon = WonderIcons.Folder, tint = Color(0xFF4A90E2), onClick = { bg({ Folders.addTo(context, g.id, a.key) }) }); PanelDivider() }
                 ListRow("New folder with this app", icon = WonderIcons.CreateNewFolder, tint = Color(0xFF4A90E2), onClick = { onDismiss(); onNewFolder() }); PanelDivider()
                 if (current != null) { ListRow("Take out of “${current.name}”", icon = WonderIcons.FolderOpen, tint = Color(0xFF7A7F87), onClick = { bg({ Folders.takeOut(context, a.key) }) }); PanelDivider() }
-                ListRow("Hide from Launchpad", icon = WonderIcons.VisibilityOff, tint = Color(0xFF7A7F87), onClick = { bg({ Folders.hide(context, a.key, true) }) { say("Hidden. Find it again under ⋮ › Hidden apps") } }); PanelDivider()
+                ListRow("Hide from all apps", icon = WonderIcons.VisibilityOff, tint = Color(0xFF7A7F87), onClick = { bg({ Folders.hide(context, a.key, true) }) { say("Hidden. Find it again under ⋮ › Hidden apps") } }); PanelDivider()
                 ListRow("App info", icon = WonderIcons.Info, tint = Color(0xFF7A7F87), onClick = { onDismiss(); context.launchSafely(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${a.pkg}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {} }); PanelDivider()
                 ListRow("Uninstall", icon = WonderIcons.Delete, danger = true, onClick = { onDismiss(); context.launchSafely(Intent(Intent.ACTION_DELETE, Uri.parse("package:${a.pkg}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {} })
             }
