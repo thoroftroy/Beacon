@@ -15,9 +15,10 @@ import dev.wonderdesk.shared.*
 /** A search bar on the home screen: tap to search everything, or All apps. */
 class SearchWidget : AppWidgetProvider() {
     companion object {
-        fun build(c: Context, id: Int): RemoteViews {
+        fun build(c: Context, id: Int): RemoteViews = dev.wonderdesk.shared.responsiveWidget(R.layout.widget_search_small, null, R.layout.widget_search) { fill(c, id, it) }
+        private fun fill(c: Context, id: Int, layout: Int): RemoteViews {
             val s = WidgetPrefs(c, id)
-            val v = RemoteViews(c.packageName, R.layout.widget_search)
+            val v = RemoteViews(c.packageName, layout)
             val dark = s.bool("dark", false)
             v.setInt(R.id.w_root, "setBackgroundResource", if (dark) R.drawable.wd_pill_dark else R.drawable.wd_pill)
             v.setTextColor(R.id.w_hint, if (dark) 0xCCFFFFFF.toInt() else 0xFF6B7078.toInt())
@@ -26,6 +27,7 @@ class SearchWidget : AppWidgetProvider() {
             fun lp(rc: Int, search: Boolean) = PendingIntent.getActivity(c, rc, Intent(c, LaunchpadActivity::class.java).putExtra("search", search).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             v.setOnClickPendingIntent(R.id.w_root, lp(51, true))
             v.setOnClickPendingIntent(R.id.w_apps, lp(52, false))
+            if (layout != R.layout.widget_search) { v.setViewVisibility(R.id.w_hint, View.GONE); v.setViewVisibility(R.id.w_apps, View.GONE) }
             return v
         }
     }

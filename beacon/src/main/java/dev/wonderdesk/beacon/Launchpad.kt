@@ -97,6 +97,8 @@ class LaunchpadActivity : ComponentActivity() {
     }
 }
 
+private var lastTap: Offset? = null
+
 /** Apps load once per process and refresh in the background, so Launchpad opens instantly. */
 private object AppCache {
     var apps by mutableStateOf<List<AppHit>>(emptyList())
@@ -154,7 +156,12 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     BackHandler { when { openGroup != null -> openGroup = null; q.isNotEmpty() -> q = ""; else -> close() } }
 
     fun open(a: AppHit) {
-        context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) { message = it }
+        val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        // The app grows out of the icon you tapped.
+        val opts = (context as? android.app.Activity)?.window?.decorView?.let { v -> lastTap?.let { pt ->
+            val sz = (64 * context.resources.displayMetrics.density).toInt()
+            android.app.ActivityOptions.makeScaleUpAnimation(v, pt.x.toInt() - sz / 2, pt.y.toInt() - sz / 2, sz, sz).toBundle() } }
+        if (runCatching { context.startActivity(i, opts) }.isFailure) context.launchSafely(i) { message = it }
         scope.launch(Dispatchers.IO) { Folders.recordLaunch(context, a.key) }
         onClose()
     }
@@ -175,6 +182,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize()
+        .pointerInput(Unit) { awaitPointerEventScope { while (true) { val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial); e.changes.firstOrNull()?.let { if (it.pressed) lastTap = it.position } } } }
         .graphicsLayer { alpha = enter.value.coerceIn(0f, 1f) }
         .background(Brush.verticalGradient(listOf(Color(0xCC10161E), Color(0xE60A0D12))))
         .pointerInput(Unit) { detectTapGestures { close() } }

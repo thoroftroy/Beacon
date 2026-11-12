@@ -1,5 +1,13 @@
 # Beacon changelog
 
+## v0.5.2
+
+- Apps open by growing out of the icon you tapped
+- Smoother everywhere: new screens, tabs and Settings ease in instead of snapping, and buttons, tabs, chips and switches give a light tap you can feel (following your phone's touch-feedback setting)
+- Android's predictive back: the back gesture shows a live preview of where you're going
+- Search widget shrinks to a single search button at small sizes
+- Super look: tap sparkles now match Bliss Player: soft glowing sparks with trails, drifting rainbow colours and a faint aurora, instead of big solid circles
+
 ## v0.5.1
 
 - Beacon's icon opens straight to all your apps with search, folders and sorting. Search settings and the file index are under ⋮
