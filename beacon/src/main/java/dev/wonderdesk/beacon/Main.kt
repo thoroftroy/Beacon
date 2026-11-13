@@ -57,6 +57,12 @@ class MainActivity : WonderActivity() {
     @Composable override fun Content() = BeaconApp()
 }
 
+/** What Android must allow for this app to work fully; shown as a banner when off and in Settings. */
+private val APP_NEEDS by lazy { listOf(
+    WonderNeed("All files access", "Finds documents by name and by the words inside them", required = false, access = SpecialAccess.Kind.ALL_FILES),
+    WonderNeed("Contacts", "Finds people as you type", required = false, permissions = listOf(android.Manifest.permission.READ_CONTACTS)),
+) }
+
 private const val ABOUT = "Beacon is the front door to your phone: every app with folders and sorting, and one search box for apps, settings, contacts, files, the words inside files, sums, unit conversions and the web. " +
     "The Wonderdesk Launcher uses Beacon for its search. The file index is built and kept on this phone."
 
@@ -109,6 +115,12 @@ object Folders {
         else saveLocal(c, groups(c).map { g -> if (g.id == group) g.copy(apps = (g.apps + key).distinct()) else g.copy(apps = g.apps - key) }.filter { it.apps.isNotEmpty() })
     fun create(c: Context, name: String, key: String) = if (shared(c)) call(c, "newGroup", key, android.os.Bundle().apply { putString("name", name) }).let { }
         else saveLocal(c, groups(c).map { it.copy(apps = it.apps - key) }.filter { it.apps.isNotEmpty() } + AppGroup(java.util.UUID.randomUUID().toString(), name, listOf(key)))
+    /** A new folder holding both apps (drop one app onto another); returns its id. */
+    fun createWith(c: Context, name: String, first: String, second: String): String? {
+        create(c, name, first)
+        val g = groups(c).find { first in it.apps } ?: return null
+        addTo(c, g.id, second); return g.id
+    }
     fun takeOut(c: Context, key: String) = if (shared(c)) call(c, "removeFromGroups", key).let { } else saveLocal(c, groups(c).map { it.copy(apps = it.apps - key) }.filter { it.apps.isNotEmpty() })
     fun rename(c: Context, group: String, name: String) = if (shared(c)) call(c, "renameGroup", name, android.os.Bundle().apply { putString("group", group) }).let { } else saveLocal(c, groups(c).map { if (it.id == group) it.copy(name = name) else it })
     fun delete(c: Context, group: String) = if (shared(c)) call(c, "deleteGroup", group).let { } else saveLocal(c, groups(c).filter { it.id != group })
@@ -213,7 +225,7 @@ fun BeaconApp() {
         history = (listOf(t) + history.filter { it != t }).take(12); prefs.edit().putString("history", JSONArray(history).toString()).apply()
     }
     fun open(a: AppHit) { context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) {}; Folders.recordLaunch(context, a.key) }
-    WonderApp(appName = "Beacon", about = ABOUT,
+    WonderApp(needs = APP_NEEDS, appName = "Beacon", about = ABOUT,
         title = "Beacon search",
         settings = {
             var contents by remember { mutableStateOf(prefs.getBoolean("contents", true)) }
@@ -245,7 +257,7 @@ fun BeaconApp() {
                 Text("Indexing · $it", style = MaterialTheme.typography.labelSmall, color = p.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
             } }
             val term = q.trim()
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = rememberTabTopList(), contentPadding = PaddingValues(16.dp)) {
                 if (term.isEmpty()) {
                     if (!allFiles) item {
                         Panel(Modifier.padding(bottom = 14.dp)) { ListRow("Search your files too", subtitle = "Allow all files access so Beacon can find documents by name and by the words inside them",
@@ -346,7 +358,7 @@ private fun AllApps(apps: List<AppHit>, groups: List<AppGroup>, launches: Map<St
                 SORTS.forEach { (id, name) -> Chip(name, sort == id, { sort = id; prefs.edit().putString("sort", id).apply() }) }
             }
         }
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(88.dp), Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(88.dp), Modifier.fillMaxSize(), state = rememberTabTopGrid(), contentPadding = PaddingValues(12.dp)) {
             if (filter.isBlank()) items(groups.size, key = { "g" + groups[it].id }) { i ->
                 val g = groups[i]
                 Column(Modifier.padding(4.dp).clip(RoundedCornerShape(12.dp)).clickable { openGroup = g }.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {

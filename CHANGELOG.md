@@ -1,5 +1,15 @@
 # Beacon changelog
 
+## v0.5.3
+
+- Drag apps into folders: hold an app and drop it on a folder to add it, or on another app to make a new folder; drag an app out of an open folder to take it out
+- The long list of “Move to …” folders in the app menu is replaced by one “Add to a folder…” picker
+- Swiping down to close is consistent: the page follows your finger, and a quick flick or a short pull closes it every time
+- Tap the tab you're already on to glide back to the top of its list
+- Switches Android greys out as a “Restricted setting” are now explained: the guide walks you through unlocking them in three clear steps, and keeps showing them until the switch is really on (before, on Android 15 and newer it could hide the only hint)
+- Follows your look everywhere: viewers, panels, menus and messages use the Aqua, Bliss, Dark Bliss or Super colours
+- Nothing required stays hidden: if Android is blocking something the app needs, a slim banner says what and takes you straight to the switch, and Settings › Permissions and access lists everything with its state
+
 ## v0.5.2
 
 - Apps open by growing out of the icon you tapped
