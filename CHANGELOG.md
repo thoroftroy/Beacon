@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.4
+
+- Fixes from a full round of stress testing on every screen
+
 ## v0.5.3
 
 - Drag apps into folders: hold an app and drop it on a folder to add it, or on another app to make a new folder; drag an app out of an open folder to take it out
