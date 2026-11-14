@@ -1,9 +1,12 @@
 # Beacon changelog
 
+## v0.5.6
+
+- All apps now looks like Beacon: a glass header with Beacon's badge and the search box, in your look
+
 ## v0.5.5
 
 - Widgets can now match your look: new Bliss blue and Super neon backgrounds, and “Match my Wonderdesk look” follows whatever Control Room is set to
-- All apps now looks like Beacon: a glass header with Beacon's badge and the search box, in your look
 
 ## v0.5.4
 
