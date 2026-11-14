@@ -252,7 +252,11 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
         }) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(horizontal = 14.dp)
             .graphicsLayer { val s = 1.06f - .06f * enter.value - (pull.value / 4000f).coerceAtMost(.06f); scaleX = s; scaleY = s; translationY = pull.value }) {
-            Row(Modifier.padding(vertical = 12.dp).widthIn(max = 560.dp).align(Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(vertical = 12.dp).widthIn(max = 600.dp).align(Alignment.CenterHorizontally).mediaGlass(lookChrome, 22.dp, hud = true).padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                // Beacon's own badge, so this reads as Beacon rather than a plain app drawer.
+                val art = remember { context.appArt(96) }
+                art?.let { Image(it, "Beacon", Modifier.size(34.dp).padding(end = 6.dp)) }
                 Box(Modifier.weight(1f).focusRequester(focus)) {
                     SearchField(q, { q = it }, "Search apps, settings, files, sums…", onSubmit = {
                         val top = visible.map { it to appScore(it, q) }.filter { it.second > 0 }.maxByOrNull { it.second }?.first
