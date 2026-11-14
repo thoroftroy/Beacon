@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.8
+
+- Dragging an app into a folder: the grid now scrolls when you hold the app near the top or bottom edge, so every app and folder can be reached
+- Changing the look in Control Room now restyles this app's widgets straight away, with no refresh or restart
+
 ## v0.5.7
 
 - Widgets: choose the title colour in each widget's settings (automatic, white, dark, Aqua blue, Super pink or gold), on top of the background looks

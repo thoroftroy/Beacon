@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.composed
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -118,13 +119,16 @@ private class DragState {
 private fun Modifier.draggableApp(a: AppHit, drag: DragState, onMenu: () -> Unit, onDrop: (AppHit, String?) -> Unit): Modifier = composed {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val view = androidx.compose.ui.platform.LocalView.current
+    // Keeps this tile alive while it's dragged, even when the grid scrolls it out of sight.
+    val pinnable = androidx.compose.ui.layout.LocalPinnableContainer.current
+    var pin by remember { mutableStateOf<androidx.compose.ui.layout.PinnableContainer.PinnedHandle?>(null) }
     this.onGloballyPositioned { origin = it.positionInWindow(); drag.targets["a" + a.key] = it.boundsInWindow() }
         .pointerInput(a.key) {
             detectDragGesturesAfterLongPress(
-                onDragStart = { o -> view.tick(); drag.app = a; drag.moved = false; drag.pos = origin + o },
+                onDragStart = { o -> view.tick(); pin = pinnable?.pin(); drag.app = a; drag.moved = false; drag.pos = origin + o },
                 onDrag = { ch, d -> ch.consume(); drag.pos += d; if (!drag.moved && d.getDistance() > 0f) drag.moved = true },
-                onDragEnd = { val moved = drag.moved; val over = drag.over; drag.app = null; if (!moved) onMenu() else onDrop(a, over) },
-                onDragCancel = { drag.app = null })
+                onDragEnd = { pin?.release(); pin = null; val moved = drag.moved; val over = drag.over; drag.app = null; if (!moved) onMenu() else onDrop(a, over) },
+                onDragCancel = { pin?.release(); pin = null; drag.app = null })
         }
 }
 
@@ -202,6 +206,17 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
 
     val lookChrome = rememberPlayerChrome()
     val drag = remember { DragState() }
+    val gridState = rememberLazyGridState()
+    // While you drag an app near the top or bottom edge, the grid scrolls so every app and folder can be reached.
+    val screenH = with(androidx.compose.ui.platform.LocalDensity.current) { androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    LaunchedEffect(drag.app != null) {
+        while (drag.app != null) {
+            val y = drag.pos.y; val edge = screenH * .14f
+            val speed = when { y > screenH - edge -> (y - (screenH - edge)) / edge * 40f; y < edge + 120f -> -((edge + 120f - y) / edge) * 40f; else -> 0f }
+            if (speed != 0f) { gridState.scrollBy(speed); drag.targets.clear() }
+            delay(16)
+        }
+    }
     LaunchedEffect(liveGroups, loose) { drag.targets.clear() }
     fun drop(a: AppHit, over: String?) {
         when {
@@ -276,7 +291,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             }
             if (q.isNotBlank()) LaunchpadSearch(q, visible, launches, onApp = ::open, onMenu = { menuFor = it }, onDone = onClose)
             else if (apps.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
-            else LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.fillMaxSize().nestedScroll(closeOnPull), state = rememberLazyGridState(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            else LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.fillMaxSize().nestedScroll(closeOnPull), state = gridState, contentPadding = PaddingValues(bottom = 24.dp)) {
                 if (foldersFirst) items(liveGroups, key = { "g" + it.id }) { g -> FolderTile(g, apps, drag) { openGroup = g.id } }
                 items(loose, key = { "a" + it.key }) { a -> LaunchpadTile(a, onClick = { open(a) }, onLong = { menuFor = a }, drag = drag, onDrop = ::drop) }
                 if (!foldersFirst) items(liveGroups, key = { "g" + it.id }) { g -> FolderTile(g, apps, drag) { openGroup = g.id } }
