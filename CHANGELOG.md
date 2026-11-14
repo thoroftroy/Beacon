@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.9
+
+- Lighter on the battery: in the Super look the drifting sparkles settle after a few seconds without a touch (the next tap wakes them), so a screen you're reading no longer redraws 25 times a second
+
 ## v0.5.8
 
 - Dragging an app into a folder: the grid now scrolls when you hold the app near the top or bottom edge, so every app and folder can be reached
