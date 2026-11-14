@@ -104,6 +104,7 @@ class LaunchpadActivity : ComponentActivity() {
 }
 
 private var lastTap: Offset? = null
+private const val GRID_RECENTS = 4
 
 /** An app being dragged around Launchpad: where it is (window coordinates) and what it's over. */
 private class DragState {
@@ -292,6 +293,16 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             if (q.isNotBlank()) LaunchpadSearch(q, visible, launches, onApp = ::open, onMenu = { menuFor = it }, onDone = onClose)
             else if (apps.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
             else LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.fillMaxSize().nestedScroll(closeOnPull), state = gridState, contentPadding = PaddingValues(bottom = 24.dp)) {
+                // The apps you opened most recently, one tap away (like the suggestions row on Pixel and iPhone).
+                val recentApps = visible.filter { it.pkg != context.packageName && (launches[it.key]?.second ?: 0L) > 0L }.sortedByDescending { launches[it.key]?.second ?: 0L }.take(GRID_RECENTS)
+                if (recentApps.size >= 3) {
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "recents") {
+                        Column(Modifier.padding(bottom = 6.dp).mediaGlass(lookChrome, 18.dp).padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text("Recently used", Modifier.padding(start = 8.dp, top = 4.dp), color = lookChrome.ink.copy(alpha = .8f), style = MaterialTheme.typography.labelMedium)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { recentApps.take(4).forEach { a -> LaunchpadTile(a, size = 50.dp, onClick = { open(a) }, onLong = { menuFor = a }) } }
+                        }
+                    }
+                }
                 if (foldersFirst) items(liveGroups, key = { "g" + it.id }) { g -> FolderTile(g, apps, drag) { openGroup = g.id } }
                 items(loose, key = { "a" + it.key }) { a -> LaunchpadTile(a, onClick = { open(a) }, onLong = { menuFor = a }, drag = drag, onDrop = ::drop) }
                 if (!foldersFirst) items(liveGroups, key = { "g" + it.id }) { g -> FolderTile(g, apps, drag) { openGroup = g.id } }

@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.10
+
+- Recently used: the apps you opened last sit in a glass row at the top of all apps, one tap away
+- Fixed a crash when moving around with arrow keys or Tab while a screen was closing
+
 ## v0.5.9
 
 - Lighter on the battery: in the Super look the drifting sparkles settle after a few seconds without a touch (the next tap wakes them), so a screen you're reading no longer redraws 25 times a second
