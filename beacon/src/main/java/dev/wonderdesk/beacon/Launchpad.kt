@@ -152,6 +152,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     var hidden by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sort by remember { mutableStateOf(prefs.getString("lpSort", "name") ?: "name") }
     var foldersFirst by remember { mutableStateOf(true) }
+    var moveMode by remember { mutableStateOf(false) }
     var showRecents by remember { mutableStateOf(prefs.getBoolean("lpRecents", true)) }
     fun readList(k: String) = runCatching { org.json.JSONArray(prefs.getString(k, "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())
     var pinned by remember { mutableStateOf(readList("lpPinned")) }
@@ -239,6 +240,10 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             over == null -> {}
             over.startsWith("g") -> { val g = liveGroups.find { "g" + it.id == over } ?: return
                 scope.launch { withContext(Dispatchers.IO) { Folders.addTo(context, g.id, a.key) }; tick++; message = "Added to “${g.name}”" } }
+            over.startsWith("a") && moveMode -> { val other = loose.find { "a" + it.key == over } ?: return
+                val base = loose.map { it.key }.toMutableList(); base.remove(a.key); base.add(base.indexOf(other.key).coerceAtLeast(0), a.key)
+                saveOrder(base + order.filter { it !in base })
+                if (sort != "custom") { sort = "custom"; prefs.edit().putString("lpSort", "custom").apply(); scope.launch(Dispatchers.IO) { Folders.setSort(context, "custom") } } }
             over.startsWith("a") -> { val other = visible.find { "a" + it.key == over } ?: return
                 val name = if (a.category == other.category && a.category >= 0) categoryName(a.category) else "Folder"
                 scope.launch { val id = withContext(Dispatchers.IO) { Folders.createWith(context, name, other.key, a.key) }; tick++; if (id != null) { delay(250); openGroup = id; message = "New folder. Tap its name to rename it" } } }
@@ -300,12 +305,15 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                         SORTS.forEach { (id, name) -> DropdownMenuItem({ Text(name) }, { sortMenu = false; sort = id; prefs.edit().putString("lpSort", id).apply(); scope.launch(Dispatchers.IO) { Folders.setSort(context, id) } },
                             trailingIcon = if (id == sort) ({ Icon(WonderIcons.Check, null) }) else null) }
                         HorizontalDivider()
+                        DropdownMenuItem({ Text(if (moveMode) "Done arranging" else "Arrange apps") }, { sortMenu = false; moveMode = !moveMode; message = if (moveMode) "Hold an app and drag it where you want it. Drop on a folder to add it" else null }, leadingIcon = { Icon(WonderIcons.DriveFileMove, null) })
                         DropdownMenuItem({ Text(if (showRecents) "Hide “Recently used”" else "Show “Recently used”") }, { sortMenu = false; showRecents = !showRecents; prefs.edit().putBoolean("lpRecents", showRecents).apply() }, leadingIcon = { Icon(WonderIcons.History, null) })
                         DropdownMenuItem({ Text(if (hidden.isEmpty()) "No hidden apps" else "Hidden apps (${hidden.size})") }, { sortMenu = false; showHidden = true }, enabled = hidden.isNotEmpty(), leadingIcon = { Icon(WonderIcons.VisibilityOff, null) })
                         DropdownMenuItem({ Text("Search settings and file index") }, { sortMenu = false; context.launchSafely(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {}; onClose() }, leadingIcon = { Icon(WonderIcons.Settings, null) })
                     }
                 }
             }
+            if (moveMode) Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).mediaGlass(lookChrome, 18.dp).padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Arranging: hold and drag apps", Modifier.weight(1f), color = lookChrome.ink); TextButton(onClick = { moveMode = false }) { Text("Done") } }
             if (q.isNotBlank()) LaunchpadSearch(q, visible, launches, onApp = ::open, onMenu = { menuFor = it }, onDone = onClose)
             else if (apps.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
             else LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.fillMaxSize().nestedScroll(closeOnPull), state = gridState, contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -328,7 +336,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                     }
                 }
                 if (foldersFirst) items(liveGroups, key = { "g" + it.id }) { g -> FolderTile(g, apps, drag) { openGroup = g.id } }
-                items(loose, key = { "a" + it.key }) { a -> LaunchpadTile(a, onClick = { open(a) }, onLong = { menuFor = a }, drag = drag, onDrop = ::drop) }
+                items(loose, key = { "a" + it.key }) { a -> LaunchpadTile(a, onClick = { open(a) }, onLong = { menuFor = a }, drag = if (moveMode) drag else null, onDrop = ::drop) }
                 if (!foldersFirst) items(liveGroups, key = { "g" + it.id }) { g -> FolderTile(g, apps, drag) { openGroup = g.id } }
             }
         }
@@ -338,7 +346,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { origin.value = it.positionInWindow() }) {
                 a.icon?.let { Image(it, null, Modifier.size(72.dp).graphicsLayer { translationX = drag.pos.x - origin.value.x - half; translationY = drag.pos.y - origin.value.y - half * 1.6f; shadowElevation = 24f }) }
             }
-            if (drag.moved) Text(when { drag.over?.startsWith("g") == true -> "Drop to add to “${liveGroups.find { "g" + it.id == drag.over }?.name}”"; drag.over != null -> "Drop to make a folder"; openGroup != null -> "Drop outside to take it out"; else -> "Drop on an app or folder" },
+            if (drag.moved) Text(when { drag.over?.startsWith("g") == true -> "Drop to add to “${liveGroups.find { "g" + it.id == drag.over }?.name}”"; drag.over != null && moveMode -> "Drop to put it here"; drag.over != null -> "Drop to make a folder"; openGroup != null -> "Drop outside to take it out"; else -> "Drop on an app or folder" },
                 Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 70.dp).mediaGlass(lookChrome, 18.dp).padding(16.dp, 8.dp), color = lookChrome.ink)
         }
         openGroup?.let { id -> liveGroups.find { it.id == id }?.let { g -> FolderPanel(g, apps, sort, launches, drag, onApp = ::open, onMenu = { menuFor = it }, onChanged = { tick++ }) { openGroup = null } } ?: run { openGroup = null } }
