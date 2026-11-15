@@ -141,7 +141,7 @@ object Folders {
     fun setSort(c: Context, sort: String) { if (shared(c)) call(c, "setSort", sort) }
 }
 
-internal val SORTS = listOf("name" to "A to Z", "name_desc" to "Z to A", "used" to "Most used", "recent" to "Recently used", "installed" to "Newest", "category" to "By category")
+internal val SORTS = listOf("name" to "A to Z", "name_desc" to "Z to A", "used" to "Most used", "recent" to "Recently used", "installed" to "Newest", "category" to "By category", "custom" to "My order")
 
 internal fun categoryName(cat: Int) = when (cat) {
     android.content.pm.ApplicationInfo.CATEGORY_GAME -> "Games"; android.content.pm.ApplicationInfo.CATEGORY_AUDIO -> "Music & audio"; android.content.pm.ApplicationInfo.CATEGORY_VIDEO -> "Video"
@@ -149,7 +149,8 @@ internal fun categoryName(cat: Int) = when (cat) {
     android.content.pm.ApplicationInfo.CATEGORY_MAPS -> "Maps & travel"; android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY -> "Productivity"; else -> "Other"
 }
 
-internal fun sorted(list: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>) = when (sort) {
+internal fun sorted(list: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>, order: List<String> = emptyList()) = when (sort) {
+    "custom" -> list.sortedWith(compareBy<AppHit> { order.indexOf(it.key).let { i -> if (i < 0) Int.MAX_VALUE else i } }.thenBy { it.label.lowercase() })
     "name_desc" -> list.sortedByDescending { it.label.lowercase() }
     "used" -> list.sortedWith(compareByDescending<AppHit> { launches[it.key]?.first ?: 0 }.thenBy { it.label.lowercase() })
     "recent" -> list.sortedWith(compareByDescending<AppHit> { launches[it.key]?.second ?: 0L }.thenBy { it.label.lowercase() })
@@ -186,6 +187,7 @@ fun BeaconApp() {
     var history by remember { mutableStateOf(runCatching { JSONArray(prefs.getString("history", "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())) }
     val resumed = rememberIsResumed()
     var allFiles by remember { mutableStateOf(android.os.Environment.isExternalStorageManager()) }
+    var searchContacts by remember { mutableStateOf(prefs.getBoolean("searchContacts", true)) }
     var contactsOk by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
     val askContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { contactsOk = it }
     var filesGuide by remember { mutableStateOf(false) }
@@ -230,6 +232,8 @@ fun BeaconApp() {
         settings = {
             var contents by remember { mutableStateOf(prefs.getBoolean("contents", true)) }
             Panel(title = "Search", footer = "Beacon reads text files to find words inside them: notes, Markdown, code, subtitles, spreadsheets saved as CSV and more. The index stays on this phone.") {
+                SwitchRow("Search contacts", searchContacts, { searchContacts = it; prefs.edit().putBoolean("searchContacts", it).apply() }, icon = WonderIcons.Person, tint = Color(0xFF16A085), subtitle = "Switch off to stop contacts showing in results, without taking the permission away")
+                PanelDivider()
                 SwitchRow("Search inside files", contents, { contents = it; prefs.edit().putBoolean("contents", it).apply() }, icon = WonderIcons.TextSnippet, tint = Color(0xFF8E44AD))
                 PanelDivider()
                 ListRow("Rebuild the index now", subtitle = "%,d files and folders · %,d documents with text".format(counts.first, counts.second), icon = WonderIcons.Refresh, tint = Color(0xFF1E7FE8), onClick = { index.clear(); reindex() })
@@ -314,7 +318,7 @@ fun BeaconApp() {
                         trailing = { if (c.subtitle.isNotBlank()) IconButton(onClick = { context.launchSafely(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.subtitle}"))) {} }) { Icon(WonderIcons.Phone, "Call", tint = Color(0xFF2E9E44)) } },
                         onClick = { c.intent?.let { context.launchSafely(it) {} } }) }
                     item { Spacer(Modifier.height(14.dp)) }
-                } else if (!contactsOk) item {
+                } else if (!contactsOk && searchContacts) item {
                     Text("Search contacts too", Modifier.clickable { askContacts.launch(Manifest.permission.READ_CONTACTS) }.padding(6.dp), color = p.accent, style = MaterialTheme.typography.labelLarge)
                 }
                 if (files.isNotEmpty()) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -151,6 +152,12 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     var hidden by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sort by remember { mutableStateOf(prefs.getString("lpSort", "name") ?: "name") }
     var foldersFirst by remember { mutableStateOf(true) }
+    var showRecents by remember { mutableStateOf(prefs.getBoolean("lpRecents", true)) }
+    fun readList(k: String) = runCatching { org.json.JSONArray(prefs.getString(k, "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())
+    var pinned by remember { mutableStateOf(readList("lpPinned")) }
+    var order by remember { mutableStateOf(readList("lpOrder")) }
+    fun savePinned(l: List<String>) { pinned = l; prefs.edit().putString("lpPinned", org.json.JSONArray(l).toString()).apply() }
+    fun saveOrder(l: List<String>) { order = l; prefs.edit().putString("lpOrder", org.json.JSONArray(l).toString()).apply() }
     var tick by remember { mutableIntStateOf(0) }
     var menuFor by remember { mutableStateOf<AppHit?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
@@ -202,8 +209,16 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
 
     val visible = remember(apps, hidden) { apps.filter { it.key !in hidden } }
     val inGroups = remember(groups) { groups.flatMap { it.apps }.toSet() }
-    val loose = remember(visible, sort, launches, inGroups) { sorted(visible.filter { it.key !in inGroups }, sort, launches) }
+    val loose = remember(visible, sort, launches, inGroups, order) { sorted(visible.filter { it.key !in inGroups }, sort, launches, order) }
     val liveGroups = remember(groups, visible) { groups.map { g -> g.copy(apps = g.apps.filter { k -> visible.any { it.key == k } }) }.filter { it.apps.isNotEmpty() } }
+
+    fun moveApp(a: AppHit, by: Int) {
+        val base = loose.map { it.key }.toMutableList(); val i = base.indexOf(a.key); if (i < 0) return
+        val j = (i + by).coerceIn(0, base.lastIndex); base.removeAt(i); base.add(j, a.key)
+        saveOrder(base + order.filter { it !in base })
+        if (sort != "custom") { sort = "custom"; prefs.edit().putString("lpSort", "custom").apply(); scope.launch(Dispatchers.IO) { Folders.setSort(context, "custom") } }
+    }
+    val pinnedApps = remember(pinned, visible) { pinned.mapNotNull { k -> visible.find { it.key == k } } }
 
     val lookChrome = rememberPlayerChrome()
     val drag = remember { DragState() }
@@ -285,6 +300,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                         SORTS.forEach { (id, name) -> DropdownMenuItem({ Text(name) }, { sortMenu = false; sort = id; prefs.edit().putString("lpSort", id).apply(); scope.launch(Dispatchers.IO) { Folders.setSort(context, id) } },
                             trailingIcon = if (id == sort) ({ Icon(WonderIcons.Check, null) }) else null) }
                         HorizontalDivider()
+                        DropdownMenuItem({ Text(if (showRecents) "Hide “Recently used”" else "Show “Recently used”") }, { sortMenu = false; showRecents = !showRecents; prefs.edit().putBoolean("lpRecents", showRecents).apply() }, leadingIcon = { Icon(WonderIcons.History, null) })
                         DropdownMenuItem({ Text(if (hidden.isEmpty()) "No hidden apps" else "Hidden apps (${hidden.size})") }, { sortMenu = false; showHidden = true }, enabled = hidden.isNotEmpty(), leadingIcon = { Icon(WonderIcons.VisibilityOff, null) })
                         DropdownMenuItem({ Text("Search settings and file index") }, { sortMenu = false; context.launchSafely(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {}; onClose() }, leadingIcon = { Icon(WonderIcons.Settings, null) })
                     }
@@ -295,7 +311,15 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             else LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.fillMaxSize().nestedScroll(closeOnPull), state = gridState, contentPadding = PaddingValues(bottom = 24.dp)) {
                 // The apps you opened most recently, one tap away (like the suggestions row on Pixel and iPhone).
                 val recentApps = visible.filter { it.pkg != context.packageName && (launches[it.key]?.second ?: 0L) > 0L }.sortedByDescending { launches[it.key]?.second ?: 0L }.take(GRID_RECENTS)
-                if (recentApps.size >= 3) {
+                if (pinnedApps.isNotEmpty()) {
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "pinned") {
+                        Column(Modifier.padding(bottom = 6.dp).mediaGlass(lookChrome, 18.dp).padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Text("Pinned", Modifier.padding(start = 8.dp, top = 4.dp), color = lookChrome.ink.copy(alpha = .8f), style = MaterialTheme.typography.labelMedium)
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.SpaceEvenly) { pinnedApps.forEach { a -> LaunchpadTile(a, size = 50.dp, onClick = { open(a) }, onLong = { menuFor = a }) } }
+                        }
+                    }
+                }
+                if (showRecents && recentApps.size >= 3) {
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "recents") {
                         Column(Modifier.padding(bottom = 6.dp).mediaGlass(lookChrome, 18.dp).padding(horizontal = 6.dp, vertical = 4.dp)) {
                             Text("Recently used", Modifier.padding(start = 8.dp, top = 4.dp), color = lookChrome.ink.copy(alpha = .8f), style = MaterialTheme.typography.labelMedium)
@@ -321,7 +345,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
         message?.let { m -> Text(m, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).mediaGlass(lookChrome, 18.dp).padding(16.dp, 10.dp), color = lookChrome.ink) }
     }
 
-    menuFor?.let { a -> AppMenu(a, groups, onDismiss = { menuFor = null }, onNewFolder = { newFolderFor = a }, onChanged = { tick++ }, say = { message = it }, onOpen = { open(a) }) }
+    menuFor?.let { a -> AppMenu(a, groups, pinned = a.key in pinned, onPin = { savePinned(if (a.key in pinned) pinned - a.key else (pinned + a.key).takeLast(8)) }, canMove = a.key in loose.map { it.key }, onMove = { moveApp(a, it) }, onDismiss = { menuFor = null }, onNewFolder = { newFolderFor = a }, onChanged = { tick++ }, say = { message = it }, onOpen = { open(a) }) }
     newFolderFor?.let { a -> InputDialog("New folder", "Folder name", confirm = "Create", onDismiss = { newFolderFor = null }) { n -> scope.launch(Dispatchers.IO) { Folders.create(context, n.ifBlank { "Folder" }, a.key); withContext(Dispatchers.Main) { tick++ } } } }
     if (showHidden) WonderDialog(onDismissRequest = { showHidden = false }, title = { Text("Hidden apps") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -402,7 +426,7 @@ private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches:
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun AppMenu(a: AppHit, groups: List<AppGroup>, onDismiss: () -> Unit, onNewFolder: () -> Unit, onChanged: () -> Unit, say: (String) -> Unit, onOpen: () -> Unit) {
+private fun AppMenu(a: AppHit, groups: List<AppGroup>, pinned: Boolean, onPin: () -> Unit, canMove: Boolean, onMove: (Int) -> Unit, onDismiss: () -> Unit, onNewFolder: () -> Unit, onChanged: () -> Unit, say: (String) -> Unit, onOpen: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val current = groups.find { a.key in it.apps }
@@ -413,6 +437,11 @@ private fun AppMenu(a: AppHit, groups: List<AppGroup>, onDismiss: () -> Unit, on
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Panel {
                 ListRow("Open", icon = WonderIcons.OpenInNew, onClick = { onDismiss(); onOpen() }); PanelDivider()
+                ListRow(if (pinned) "Unpin from the top" else "Pin to the top", icon = WonderIcons.Star, tint = Color(0xFFE6A100), onClick = { onDismiss(); onPin() }); PanelDivider()
+                if (canMove) {
+                    ListRow("Move earlier", subtitle = "Switches to “My order”", icon = WonderIcons.ArrowBack, tint = Color(0xFF7A7F87), onClick = { onDismiss(); onMove(-1) }); PanelDivider()
+                    ListRow("Move later", icon = WonderIcons.ArrowForward, tint = Color(0xFF7A7F87), onClick = { onDismiss(); onMove(1) }); PanelDivider()
+                }
                 if (shared) {
                     ListRow("Add to home screen", icon = WonderIcons.Home, tint = Color(0xFF2E9E44), onClick = {
                         onDismiss(); scope.launch { val ok = withContext(Dispatchers.IO) { Folders.addToHome(context, a.key) }; say(if (ok) "Added to your home screen" else "No room on that home screen page") }

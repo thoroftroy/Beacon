@@ -1,5 +1,12 @@
 # Beacon changelog
 
+## v0.5.11
+
+- New setting Search contacts: stop contacts showing in results without taking the permission away
+- All apps: turn “Recently used” off or on from the ⋮ menu
+- All apps: pin up to 8 apps to a Pinned row at the top (hold an app › Pin to the top)
+- All apps: a “My order” sort; hold an app and choose Move earlier or Move later, and the order is saved
+
 ## v0.5.10
 
 - Recently used: the apps you opened last sit in a glass row at the top of all apps, one tap away

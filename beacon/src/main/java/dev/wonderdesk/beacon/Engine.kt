@@ -127,6 +127,7 @@ object Engine {
     }
 
     fun contacts(c: Context, q: String): List<Hit> {
+        if (!c.getSharedPreferences("beacon", Context.MODE_PRIVATE).getBoolean("searchContacts", true)) return emptyList()
         if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED || q.length < 2) return emptyList()
         return runCatching {
             c.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
