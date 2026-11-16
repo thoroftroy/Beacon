@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.13
+
+- Folder long-press fixed: apps inside folders open their options menu like everywhere else; drag-to-move only happens in Arrange mode
+
 ## v0.5.12
 
 - Arrange apps (⋮ menu): a move mode where you hold an app and drag it where you want it (the order is saved); outside move mode, holding an app just opens its options: add to home screen or Dock, pin, folder, hide, info, uninstall

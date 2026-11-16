@@ -349,7 +349,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             if (drag.moved) Text(when { drag.over?.startsWith("g") == true -> "Drop to add to “${liveGroups.find { "g" + it.id == drag.over }?.name}”"; drag.over != null && moveMode -> "Drop to put it here"; drag.over != null -> "Drop to make a folder"; openGroup != null -> "Drop outside to take it out"; else -> "Drop on an app or folder" },
                 Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 70.dp).mediaGlass(lookChrome, 18.dp).padding(16.dp, 8.dp), color = lookChrome.ink)
         }
-        openGroup?.let { id -> liveGroups.find { it.id == id }?.let { g -> FolderPanel(g, apps, sort, launches, drag, onApp = ::open, onMenu = { menuFor = it }, onChanged = { tick++ }) { openGroup = null } } ?: run { openGroup = null } }
+        openGroup?.let { id -> liveGroups.find { it.id == id }?.let { g -> FolderPanel(g, apps, sort, launches, drag, moveMode, onApp = ::open, onMenu = { menuFor = it }, onChanged = { tick++ }) { openGroup = null } } ?: run { openGroup = null } }
         message?.let { m -> Text(m, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).mediaGlass(lookChrome, 18.dp).padding(16.dp, 10.dp), color = lookChrome.ink) }
     }
 
@@ -399,7 +399,7 @@ private fun FolderTile(g: AppGroup, apps: List<AppHit>, drag: DragState? = null,
 }
 
 @Composable
-private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>, drag: DragState, onApp: (AppHit) -> Unit, onMenu: (AppHit) -> Unit, onChanged: () -> Unit, onClose: () -> Unit) {
+private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>, drag: DragState, moveMode: Boolean, onApp: (AppHit) -> Unit, onMenu: (AppHit) -> Unit, onChanged: () -> Unit, onClose: () -> Unit) {
     var panel by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -417,10 +417,10 @@ private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches:
                 Icon(WonderIcons.Edit, "Rename folder", Modifier.clip(CircleShape).clickable { rename = true }.padding(8.dp), tint = Color.White)
                 Icon(WonderIcons.Delete, "Delete folder", Modifier.clip(CircleShape).clickable { confirmDelete = true }.padding(8.dp), tint = Color.White)
             }
-            Text("Hold and drag an app out of the folder to take it out", Modifier.padding(bottom = 6.dp), color = Color.White.copy(alpha = .6f), style = MaterialTheme.typography.labelSmall)
+            Text(if (moveMode) "Hold and drag an app out of the folder to take it out" else "Hold an app for options", Modifier.padding(bottom = 6.dp), color = Color.White.copy(alpha = .6f), style = MaterialTheme.typography.labelSmall)
             LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.heightIn(max = 460.dp)) {
                 items(sorted(g.apps.distinct().mapNotNull { k -> apps.find { it.key == k } }, sort, launches), key = { it.key }) { a ->
-                    LaunchpadTile(a, onClick = { onApp(a) }, onLong = { onMenu(a) }, drag = drag, onDrop = { app, _ ->
+                    LaunchpadTile(a, onClick = { onApp(a) }, onLong = { onMenu(a) }, drag = if (moveMode) drag else null, onDrop = { app, _ ->
                         if (!panel.contains(drag.pos)) scope.launch { withContext(Dispatchers.IO) { Folders.takeOut(context, app.key) }; onChanged(); onClose() }
                     })
                 }
