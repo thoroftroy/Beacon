@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.14
+
+- Folder moves now show instantly: dragging into/out of folders, renames and deletes update the grid at once instead of sometimes needing a reopen
+- A failed folders read no longer blanks the grid — the last good state stays until the next good read
+
 ## v0.5.13
 
 - Folder long-press fixed: apps inside folders open their options menu like everywhere else; drag-to-move only happens in Arrange mode

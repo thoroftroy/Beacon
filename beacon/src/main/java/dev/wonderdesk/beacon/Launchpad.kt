@@ -180,12 +180,19 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     LaunchedEffect(tick, resumed) {
         if (!resumed) return@LaunchedEffect
         withContext(Dispatchers.IO) {
-            val g = runCatching { Folders.groups(context) }.getOrDefault(emptyList())
-            val l = runCatching { Folders.launches(context) }.getOrDefault(emptyMap())
-            val h = runCatching { Folders.hidden(context) }.getOrDefault(emptySet())
-            val ff = runCatching { Folders.foldersFirst(context) }.getOrDefault(true)
+            val g = runCatching { Folders.groups(context) }.getOrNull()
+            val l = runCatching { Folders.launches(context) }.getOrNull()
+            val h = runCatching { Folders.hidden(context) }.getOrNull()
+            val ff = runCatching { Folders.foldersFirst(context) }.getOrNull()
             val sh = Folders.sort(context)
-            withContext(Dispatchers.Main) { groups = g; launches = l; hidden = h; foldersFirst = ff; if (sh != null) sort = sh }
+            // A failed read must never wipe the screen: keep the old state and retry next time.
+            withContext(Dispatchers.Main) {
+                if (g != null) groups = g
+                if (l != null) launches = l
+                if (h != null) hidden = h
+                if (ff != null) foldersFirst = ff
+                if (sh != null) sort = sh
+            }
         }
     }
     LaunchedEffect(searchRequest) { if (searchRequest > 0) { delay(250); runCatching { focus.requestFocus(); keyboard?.show() } } }
@@ -235,10 +242,24 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
         }
     }
     LaunchedEffect(liveGroups, loose) { drag.targets.clear() }
+    /** Shows a folder change on screen at once, so moves never wait on a provider round-trip. */
+    fun mutateGroups(t: (List<AppGroup>) -> List<AppGroup>) { groups = t(groups) }
+    /** Re-reads folders until they show the expected state, so a slow write can't leave stale UI behind. */
+    fun awaitGroups(pred: (List<AppGroup>) -> Boolean) {
+        scope.launch(Dispatchers.IO) {
+            repeat(8) {
+                delay(150)
+                val g = runCatching { Folders.groups(context) }.getOrNull() ?: return@repeat
+                if (pred(g)) { withContext(Dispatchers.Main) { groups = g; tick++ }; return@launch }
+            }
+            withContext(Dispatchers.Main) { tick++ }
+        }
+    }
     fun drop(a: AppHit, over: String?) {
         when {
             over == null -> {}
             over.startsWith("g") -> { val g = liveGroups.find { "g" + it.id == over } ?: return
+                mutateGroups { gs -> gs.map { if (it.id == g.id) it.copy(apps = (it.apps + a.key).distinct()) else it.copy(apps = it.apps - a.key) } }
                 scope.launch { withContext(Dispatchers.IO) { Folders.addTo(context, g.id, a.key) }; tick++; message = "Added to “${g.name}”" } }
             over.startsWith("a") && moveMode -> { val other = loose.find { "a" + it.key == over } ?: return
                 val base = loose.map { it.key }.toMutableList(); base.remove(a.key); base.add(base.indexOf(other.key).coerceAtLeast(0), a.key)
@@ -246,7 +267,13 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                 if (sort != "custom") { sort = "custom"; prefs.edit().putString("lpSort", "custom").apply(); scope.launch(Dispatchers.IO) { Folders.setSort(context, "custom") } } }
             over.startsWith("a") -> { val other = visible.find { "a" + it.key == over } ?: return
                 val name = if (a.category == other.category && a.category >= 0) categoryName(a.category) else "Folder"
-                scope.launch { val id = withContext(Dispatchers.IO) { Folders.createWith(context, name, other.key, a.key) }; tick++; if (id != null) { delay(250); openGroup = id; message = "New folder. Tap its name to rename it" } } }
+                scope.launch {
+                    val id = withContext(Dispatchers.IO) { Folders.createWith(context, name, other.key, a.key) }
+                    if (id != null) {
+                        mutateGroups { gs -> gs.map { it.copy(apps = it.apps - a.key - other.key) }.filter { it.apps.isNotEmpty() } + AppGroup(id, name, listOf(other.key, a.key)) }
+                        tick++; delay(250); openGroup = id; message = "New folder. Tap its name to rename it"
+                    } else awaitGroups({ gs -> gs.any { a.key in it.apps && other.key in it.apps } })
+                } }
         }
     }
 
@@ -349,12 +376,15 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             if (drag.moved) Text(when { drag.over?.startsWith("g") == true -> "Drop to add to “${liveGroups.find { "g" + it.id == drag.over }?.name}”"; drag.over != null && moveMode -> "Drop to put it here"; drag.over != null -> "Drop to make a folder"; openGroup != null -> "Drop outside to take it out"; else -> "Drop on an app or folder" },
                 Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 70.dp).mediaGlass(lookChrome, 18.dp).padding(16.dp, 8.dp), color = lookChrome.ink)
         }
-        openGroup?.let { id -> liveGroups.find { it.id == id }?.let { g -> FolderPanel(g, apps, sort, launches, drag, moveMode, onApp = ::open, onMenu = { menuFor = it }, onChanged = { tick++ }) { openGroup = null } } ?: run { openGroup = null } }
+        openGroup?.let { id -> liveGroups.find { it.id == id }?.let { g -> FolderPanel(g, apps, sort, launches, drag, moveMode, mutate = ::mutateGroups, onApp = ::open, onMenu = { menuFor = it }, onChanged = { tick++ }) { openGroup = null } } ?: run { openGroup = null } }
         message?.let { m -> Text(m, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).mediaGlass(lookChrome, 18.dp).padding(16.dp, 10.dp), color = lookChrome.ink) }
     }
 
-    menuFor?.let { a -> AppMenu(a, groups, pinned = a.key in pinned, onPin = { savePinned(if (a.key in pinned) pinned - a.key else (pinned + a.key).takeLast(8)) }, canMove = a.key in loose.map { it.key }, onMove = { moveApp(a, it) }, onDismiss = { menuFor = null }, onNewFolder = { newFolderFor = a }, onChanged = { tick++ }, say = { message = it }, onOpen = { open(a) }) }
-    newFolderFor?.let { a -> InputDialog("New folder", "Folder name", confirm = "Create", onDismiss = { newFolderFor = null }) { n -> scope.launch(Dispatchers.IO) { Folders.create(context, n.ifBlank { "Folder" }, a.key); withContext(Dispatchers.Main) { tick++ } } } }
+    menuFor?.let { a -> AppMenu(a, groups, pinned = a.key in pinned, onPin = { savePinned(if (a.key in pinned) pinned - a.key else (pinned + a.key).takeLast(8)) }, canMove = a.key in loose.map { it.key }, onMove = { moveApp(a, it) }, onDismiss = { menuFor = null }, onNewFolder = { newFolderFor = a }, mutate = ::mutateGroups, onChanged = { tick++ }, say = { message = it }, onOpen = { open(a) }) }
+    newFolderFor?.let { a -> InputDialog("New folder", "Folder name", confirm = "Create", onDismiss = { newFolderFor = null }) { n ->
+        val nm = n.ifBlank { "Folder" }
+        scope.launch { withContext(Dispatchers.IO) { Folders.create(context, nm, a.key) }; awaitGroups({ gs -> gs.any { a.key in it.apps } }) }
+    } }
     if (showHidden) WonderDialog(onDismissRequest = { showHidden = false }, title = { Text("Hidden apps") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text("Hidden apps stay installed. They don't show in the grid but still come up when you search for them.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
@@ -399,7 +429,7 @@ private fun FolderTile(g: AppGroup, apps: List<AppHit>, drag: DragState? = null,
 }
 
 @Composable
-private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>, drag: DragState, moveMode: Boolean, onApp: (AppHit) -> Unit, onMenu: (AppHit) -> Unit, onChanged: () -> Unit, onClose: () -> Unit) {
+private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches: Map<String, Pair<Int, Long>>, drag: DragState, moveMode: Boolean, mutate: ((List<AppGroup>) -> List<AppGroup>) -> Unit, onApp: (AppHit) -> Unit, onMenu: (AppHit) -> Unit, onChanged: () -> Unit, onClose: () -> Unit) {
     var panel by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -421,20 +451,29 @@ private fun FolderPanel(g: AppGroup, apps: List<AppHit>, sort: String, launches:
             LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.heightIn(max = 460.dp)) {
                 items(sorted(g.apps.distinct().mapNotNull { k -> apps.find { it.key == k } }, sort, launches), key = { it.key }) { a ->
                     LaunchpadTile(a, onClick = { onApp(a) }, onLong = { onMenu(a) }, drag = if (moveMode) drag else null, onDrop = { app, _ ->
-                        if (!panel.contains(drag.pos)) scope.launch { withContext(Dispatchers.IO) { Folders.takeOut(context, app.key) }; onChanged(); onClose() }
+                        if (!panel.contains(drag.pos)) {
+                            mutate { gs -> gs.map { it.copy(apps = it.apps - app.key) }.filter { it.apps.isNotEmpty() } }
+                            scope.launch { withContext(Dispatchers.IO) { Folders.takeOut(context, app.key) }; onChanged(); onClose() }
+                        }
                     })
                 }
             }
         }
     }
-    if (rename) InputDialog("Rename folder", "Name", initial = g.name, onDismiss = { rename = false }) { n -> scope.launch(Dispatchers.IO) { Folders.rename(context, g.id, n); withContext(Dispatchers.Main) { onChanged() } } }
+    if (rename) InputDialog("Rename folder", "Name", initial = g.name, onDismiss = { rename = false }) { n ->
+        mutate { gs -> gs.map { if (it.id == g.id) it.copy(name = n) else it } }
+        scope.launch(Dispatchers.IO) { Folders.rename(context, g.id, n); withContext(Dispatchers.Main) { onChanged() } }
+    }
     if (confirmDelete) ConfirmDialog("Delete “${g.name}”?", "The apps stay installed and go back into Launchpad.", "Delete folder",
-        onConfirm = { scope.launch(Dispatchers.IO) { Folders.delete(context, g.id); withContext(Dispatchers.Main) { onChanged(); onClose() } } }, onDismiss = { confirmDelete = false })
+        onConfirm = {
+            mutate { gs -> gs.filter { it.id != g.id } }
+            scope.launch(Dispatchers.IO) { Folders.delete(context, g.id); withContext(Dispatchers.Main) { onChanged(); onClose() } }
+        }, onDismiss = { confirmDelete = false })
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun AppMenu(a: AppHit, groups: List<AppGroup>, pinned: Boolean, onPin: () -> Unit, canMove: Boolean, onMove: (Int) -> Unit, onDismiss: () -> Unit, onNewFolder: () -> Unit, onChanged: () -> Unit, say: (String) -> Unit, onOpen: () -> Unit) {
+private fun AppMenu(a: AppHit, groups: List<AppGroup>, pinned: Boolean, onPin: () -> Unit, canMove: Boolean, onMove: (Int) -> Unit, onDismiss: () -> Unit, onNewFolder: () -> Unit, mutate: ((List<AppGroup>) -> List<AppGroup>) -> Unit, onChanged: () -> Unit, say: (String) -> Unit, onOpen: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val current = groups.find { a.key in it.apps }
@@ -460,7 +499,7 @@ private fun AppMenu(a: AppHit, groups: List<AppGroup>, pinned: Boolean, onPin: (
                 }
                 if (groups.any { it.id != current?.id }) { ListRow(if (current == null) "Add to a folder…" else "Move to another folder…", subtitle = "Or hold the app and drag it onto a folder", icon = WonderIcons.Folder, tint = Color(0xFF4A90E2), chevron = true, onClick = { pick = true }); PanelDivider() }
                 ListRow("New folder with this app", icon = WonderIcons.CreateNewFolder, tint = Color(0xFF4A90E2), onClick = { onDismiss(); onNewFolder() }); PanelDivider()
-                if (current != null) { ListRow("Take out of “${current.name}”", icon = WonderIcons.FolderOpen, tint = Color(0xFF7A7F87), onClick = { bg({ Folders.takeOut(context, a.key) }) }); PanelDivider() }
+                if (current != null) { ListRow("Take out of “${current.name}”", icon = WonderIcons.FolderOpen, tint = Color(0xFF7A7F87), onClick = { mutate { gs -> gs.map { it.copy(apps = it.apps - a.key) }.filter { it.apps.isNotEmpty() } }; bg({ Folders.takeOut(context, a.key) }) }); PanelDivider() }
                 ListRow("Hide from all apps", icon = WonderIcons.VisibilityOff, tint = Color(0xFF7A7F87), onClick = { bg({ Folders.hide(context, a.key, true) }) { say("Hidden. Find it again under ⋮ › Hidden apps") } }); PanelDivider()
                 ListRow("App info", icon = WonderIcons.Info, tint = Color(0xFF7A7F87), onClick = { onDismiss(); context.launchSafely(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${a.pkg}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {} }); PanelDivider()
                 ListRow("Uninstall", icon = WonderIcons.Delete, danger = true, onClick = { onDismiss(); context.launchSafely(Intent(Intent.ACTION_DELETE, Uri.parse("package:${a.pkg}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {} })
@@ -469,7 +508,7 @@ private fun AppMenu(a: AppHit, groups: List<AppGroup>, pinned: Boolean, onPin: (
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
     if (pick) WonderDialog(onDismissRequest = { pick = false }, title = { Text("Put “${a.label}” in…") }, text = {
         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            groups.filter { it.id != current?.id }.forEach { g -> Chip(g.name, false, { pick = false; bg({ Folders.addTo(context, g.id, a.key) }) { say("Moved to “${g.name}”") } }, icon = WonderIcons.Folder) }
+            groups.filter { it.id != current?.id }.forEach { g -> Chip(g.name, false, { pick = false; mutate { gs -> gs.map { if (it.id == g.id) it.copy(apps = (it.apps + a.key).distinct()) else it.copy(apps = it.apps - a.key) } }; bg({ Folders.addTo(context, g.id, a.key) }) { say("Moved to “${g.name}”") } }, icon = WonderIcons.Folder) }
         }
     }, confirmButton = { TextButton(onClick = { pick = false }) { Text("Cancel") } })
 }

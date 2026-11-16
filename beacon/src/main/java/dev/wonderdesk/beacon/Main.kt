@@ -210,7 +210,10 @@ fun BeaconApp() {
         counts = withContext(Dispatchers.IO) { index.count() }
         if (tab == "search") runCatching { delay(200); focus.requestFocus() }
     }
-    LaunchedEffect(tick) { groups = withContext(Dispatchers.IO) { Folders.groups(context) }; launches = withContext(Dispatchers.IO) { Folders.launches(context) } }
+    LaunchedEffect(tick) {
+        withContext(Dispatchers.IO) { runCatching { Folders.groups(context) }.getOrNull() }?.let { groups = it }
+        withContext(Dispatchers.IO) { runCatching { Folders.launches(context) }.getOrNull() }?.let { launches = it }
+    }
     LaunchedEffect(allFiles) { if (allFiles && System.currentTimeMillis() - index.lastIndexed() > 6 * 3_600_000L) reindex() }
     LaunchedEffect(q) {
         val term = q.trim()
