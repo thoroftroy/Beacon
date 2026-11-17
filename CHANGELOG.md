@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.16
+
+- No loose apps message reworded to two short sentences.
+
 ## v0.5.15
 
 - New folder button in the options menu. Name it, tick the apps, done. No more figuring out drag to make a folder.
@@ -8,7 +12,7 @@
 ## v0.5.14
 
 - Folder moves now show instantly: dragging into/out of folders, renames and deletes update the grid at once instead of sometimes needing a reopen
-- A failed folders read no longer blanks the grid — the last good state stays until the next good read
+- A failed folders read no longer blanks the grid. The last good state stays until the next good read
 
 ## v0.5.13
 

@@ -549,7 +549,7 @@ private fun NewFolderDialog(apps: List<AppHit>, onDismiss: () -> Unit, onCreate:
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Field(name, { name = it }, "Folder name")
             Spacer(Modifier.height(8.dp))
-            if (apps.isEmpty()) Text("No loose apps — everything is already in a folder.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
+            if (apps.isEmpty()) Text("No loose apps. Everything is already in a folder.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
             else {
                 Text("Pick apps", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(6.dp))
