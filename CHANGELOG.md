@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.17
+
+- Loading screens now say what they are doing instead of showing a bare spinner
+- Wording tidied so no sentence needs a dash
+
 ## v0.5.16
 
 - No loose apps message reworded to two short sentences.

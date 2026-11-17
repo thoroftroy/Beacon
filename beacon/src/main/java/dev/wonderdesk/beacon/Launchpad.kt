@@ -344,7 +344,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             if (moveMode) Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).mediaGlass(lookChrome, 18.dp).padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Arranging: hold and drag apps", Modifier.weight(1f), color = lookChrome.ink); TextButton(onClick = { moveMode = false }) { Text("Done") } }
             if (q.isNotBlank()) LaunchpadSearch(q, visible, launches, onApp = ::open, onMenu = { menuFor = it }, onDone = onClose)
-            else if (apps.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
+            else if (apps.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Finding your apps…", color = Color.White) }
             else LazyVerticalGrid(GridCells.Adaptive(86.dp), Modifier.fillMaxSize().nestedScroll(closeOnPull), state = gridState, contentPadding = PaddingValues(bottom = 24.dp)) {
                 // The apps you opened most recently, one tap away (like the suggestions row on Pixel and iPhone).
                 val recentApps = visible.filter { it.pkg != context.packageName && (launches[it.key]?.second ?: 0L) > 0L }.sortedByDescending { launches[it.key]?.second ?: 0L }.take(GRID_RECENTS)
