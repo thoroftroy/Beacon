@@ -241,7 +241,8 @@ fun BeaconApp() {
                 SwitchRow("Search inside files", contents, { contents = it; prefs.edit().putBoolean("contents", it).apply() }, icon = WonderIcons.TextSnippet, tint = Color(0xFF8E44AD))
                 PanelDivider()
                 ListRow("Rebuild the index now", subtitle = "%,d files and folders · %,d documents with text".format(counts.first, counts.second), icon = WonderIcons.Refresh, tint = Color(0xFF1E7FE8), onClick = { index.clear(); reindex() })
-                PanelDivider()
+            }
+            Panel(title = "Results and history") {
                 var hm by remember { mutableIntStateOf(prefs.getInt("historyMax", 12)) }
                 Column(Modifier.padding(16.dp, 10.dp)) { Text("Remember recent searches", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Off", 6 to "6", 12 to "12", 30 to "30").forEach { (v, n) -> Chip(n, hm == v, { hm = v; prefs.edit().putInt("historyMax", v).apply(); if (v == 0) { history = emptyList(); prefs.edit().remove("history").apply() } }) } } }

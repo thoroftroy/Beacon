@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.20
+
+- Settings are grouped under clear headings: search, and results and history
+
 ## v0.5.19
 
 - New setting: the most file results shown in a search
