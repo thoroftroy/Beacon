@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.15
+
+- New folder button in the options menu. Name it, tick the apps, done. No more figuring out drag to make a folder.
+- Moving apps, renaming and deleting folders, and taking apps out now show at once. A failed folders read keeps the last good list instead of blanking the grid.
+
 ## v0.5.14
 
 - Folder moves now show instantly: dragging into/out of folders, renames and deletes update the grid at once instead of sometimes needing a reopen

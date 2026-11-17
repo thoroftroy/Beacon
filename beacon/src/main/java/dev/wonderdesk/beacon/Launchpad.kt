@@ -163,6 +163,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     var menuFor by remember { mutableStateOf<AppHit?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
     var newFolderFor by remember { mutableStateOf<AppHit?>(null) }
+    var newFolder by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var showHidden by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -333,6 +334,7 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                             trailingIcon = if (id == sort) ({ Icon(WonderIcons.Check, null) }) else null) }
                         HorizontalDivider()
                         DropdownMenuItem({ Text(if (moveMode) "Done arranging" else "Arrange apps") }, { sortMenu = false; moveMode = !moveMode; message = if (moveMode) "Hold an app and drag it where you want it. Drop on a folder to add it" else null }, leadingIcon = { Icon(WonderIcons.DriveFileMove, null) })
+                        DropdownMenuItem({ Text("New folder") }, { sortMenu = false; newFolder = true }, leadingIcon = { Icon(WonderIcons.CreateNewFolder, null) })
                         DropdownMenuItem({ Text(if (showRecents) "Hide “Recently used”" else "Show “Recently used”") }, { sortMenu = false; showRecents = !showRecents; prefs.edit().putBoolean("lpRecents", showRecents).apply() }, leadingIcon = { Icon(WonderIcons.History, null) })
                         DropdownMenuItem({ Text(if (hidden.isEmpty()) "No hidden apps" else "Hidden apps (${hidden.size})") }, { sortMenu = false; showHidden = true }, enabled = hidden.isNotEmpty(), leadingIcon = { Icon(WonderIcons.VisibilityOff, null) })
                         DropdownMenuItem({ Text("Search settings and file index") }, { sortMenu = false; context.launchSafely(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) {}; onClose() }, leadingIcon = { Icon(WonderIcons.Settings, null) })
@@ -382,9 +384,34 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
 
     menuFor?.let { a -> AppMenu(a, groups, pinned = a.key in pinned, onPin = { savePinned(if (a.key in pinned) pinned - a.key else (pinned + a.key).takeLast(8)) }, canMove = a.key in loose.map { it.key }, onMove = { moveApp(a, it) }, onDismiss = { menuFor = null }, onNewFolder = { newFolderFor = a }, mutate = ::mutateGroups, onChanged = { tick++ }, say = { message = it }, onOpen = { open(a) }) }
     newFolderFor?.let { a -> InputDialog("New folder", "Folder name", confirm = "Create", onDismiss = { newFolderFor = null }) { n ->
+        newFolderFor = null
         val nm = n.ifBlank { "Folder" }
-        scope.launch { withContext(Dispatchers.IO) { Folders.create(context, nm, a.key) }; awaitGroups({ gs -> gs.any { a.key in it.apps } }) }
+        scope.launch {
+            val id = withContext(Dispatchers.IO) {
+                Folders.create(context, nm, a.key)
+                Folders.groups(context).find { a.key in it.apps }?.id
+            }
+            if (id != null) {
+                mutateGroups { gs -> gs.map { it.copy(apps = it.apps - a.key) }.filter { it.apps.isNotEmpty() } + AppGroup(id, nm, listOf(a.key)) }
+                tick++; delay(250); openGroup = id
+            } else awaitGroups({ gs -> gs.any { a.key in it.apps } })
+        }
     } }
+    if (newFolder) NewFolderDialog(loose, onDismiss = { newFolder = false }) { name, keys ->
+        newFolder = false
+        val nm = name.ifBlank { "Folder" }
+        scope.launch {
+            val id = withContext(Dispatchers.IO) {
+                Folders.create(context, nm, keys.first())
+                keys.drop(1).forEach { k -> Folders.groups(context).find { keys.first() in it.apps }?.let { Folders.addTo(context, it.id, k) } }
+                Folders.groups(context).find { keys.first() in it.apps }?.id
+            }
+            if (id != null) {
+                mutateGroups { gs -> gs.map { it.copy(apps = it.apps - keys.toSet()) }.filter { it.apps.isNotEmpty() } + AppGroup(id, nm, keys) }
+                tick++; delay(250); openGroup = id; message = "New folder. Tap its name to rename it"
+            } else awaitGroups({ gs -> gs.any { keys.first() in it.apps } })
+        }
+    }
     if (showHidden) WonderDialog(onDismissRequest = { showHidden = false }, title = { Text("Hidden apps") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text("Hidden apps stay installed. They don't show in the grid but still come up when you search for them.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
@@ -511,6 +538,33 @@ private fun AppMenu(a: AppHit, groups: List<AppGroup>, pinned: Boolean, onPin: (
             groups.filter { it.id != current?.id }.forEach { g -> Chip(g.name, false, { pick = false; mutate { gs -> gs.map { if (it.id == g.id) it.copy(apps = (it.apps + a.key).distinct()) else it.copy(apps = it.apps - a.key) } }; bg({ Folders.addTo(context, g.id, a.key) }) { say("Moved to “${g.name}”") } }, icon = WonderIcons.Folder) }
         }
     }, confirmButton = { TextButton(onClick = { pick = false }) { Text("Cancel") } })
+}
+
+/** One-tap folder making: name it, tick the apps, done. No dragging required. */
+@Composable
+private fun NewFolderDialog(apps: List<AppHit>, onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var picked by remember { mutableStateOf(setOf<String>()) }
+    WonderDialog(onDismissRequest = onDismiss, title = { Text("New folder") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Field(name, { name = it }, "Folder name")
+            Spacer(Modifier.height(8.dp))
+            if (apps.isEmpty()) Text("No loose apps — everything is already in a folder.", style = MaterialTheme.typography.bodySmall, color = wonderPalette().secondaryText)
+            else {
+                Text("Pick apps", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                Panel {
+                    apps.forEachIndexed { i, a ->
+                        if (i > 0) PanelDivider()
+                        ListRow(a.label, leading = { a.icon?.let { Image(it, null, Modifier.size(32.dp)) } },
+                            trailing = { Checkbox(a.key in picked, { on -> picked = if (on) picked + a.key else picked - a.key }) },
+                            onClick = { picked = if (a.key in picked) picked - a.key else picked + a.key })
+                    }
+                }
+            }
+        }
+    }, confirmButton = { TextButton(enabled = picked.isNotEmpty(), onClick = { onCreate(name, picked.toList()) }) { Text("Create folder") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 /** Apps first, then sums, conversions, settings, contacts, files and the web, all in Launchpad's style. */
