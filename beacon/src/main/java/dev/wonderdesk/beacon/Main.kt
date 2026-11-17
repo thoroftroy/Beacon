@@ -246,6 +246,10 @@ fun BeaconApp() {
                 Column(Modifier.padding(16.dp, 10.dp)) { Text("Remember recent searches", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Off", 6 to "6", 12 to "12", 30 to "30").forEach { (v, n) -> Chip(n, hm == v, { hm = v; prefs.edit().putInt("historyMax", v).apply(); if (v == 0) { history = emptyList(); prefs.edit().remove("history").apply() } }) } } }
                 PanelDivider()
+                var fm by remember { mutableIntStateOf(prefs.getInt("fileMax", 15)) }
+                Column(Modifier.padding(16.dp, 10.dp)) { Text("Most file results shown", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(5, 15, 30, 60).forEach { v -> Chip("$v", fm == v, { fm = v; prefs.edit().putInt("fileMax", v).apply() }) } } }
+                PanelDivider()
                 var go by remember { mutableStateOf(prefs.getBoolean("openOnEnter", true)) }
                 SwitchRow("Open the top result when I press enter", go, { go = it; prefs.edit().putBoolean("openOnEnter", it).apply() }, icon = WonderIcons.Search, tint = Color(0xFF1E7FE8))
                 PanelDivider()
@@ -338,7 +342,7 @@ fun BeaconApp() {
                 }
                 if (files.isNotEmpty()) {
                     item { SectionLabel("Files", Modifier.padding(start = 6.dp, top = 6.dp, bottom = 6.dp)) }
-                    itemsIndexed(files.take(15), key = { _, h -> "f" + h.path }) { i, h -> FileRow(h, Modifier.panelItem(i, files.size.coerceAtMost(15)), term, onOpen = { remember(term) }) }
+                    itemsIndexed(files.take(prefs.getInt("fileMax", 15)), key = { _, h -> "f" + h.path }) { i, h -> FileRow(h, Modifier.panelItem(i, files.size.coerceAtMost(prefs.getInt("fileMax", 15))), term, onOpen = { remember(term) }) }
                     item { Spacer(Modifier.height(14.dp)) }
                 }
                 if (inside.isNotEmpty()) {

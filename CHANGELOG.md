@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.19
+
+- New setting: the most file results shown in a search
+
 ## v0.5.18
 
 - New settings: how many recent searches to remember, whether enter opens the top result, and app tile size
