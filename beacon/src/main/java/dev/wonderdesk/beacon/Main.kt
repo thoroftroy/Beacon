@@ -18,6 +18,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -227,7 +228,7 @@ fun BeaconApp() {
     }
     fun remember(term: String) {
         val t = term.trim(); if (t.length < 2) return
-        history = (listOf(t) + history.filter { it != t }).take(12); prefs.edit().putString("history", JSONArray(history).toString()).apply()
+        val keep = prefs.getInt("historyMax", 12); history = (listOf(t) + history.filter { it != t }).take(keep); prefs.edit().putString("history", JSONArray(history).toString()).apply()
     }
     fun open(a: AppHit) { context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) {}; Folders.recordLaunch(context, a.key) }
     WonderApp(needs = APP_NEEDS, appName = "Beacon", about = ABOUT,
@@ -240,6 +241,16 @@ fun BeaconApp() {
                 SwitchRow("Search inside files", contents, { contents = it; prefs.edit().putBoolean("contents", it).apply() }, icon = WonderIcons.TextSnippet, tint = Color(0xFF8E44AD))
                 PanelDivider()
                 ListRow("Rebuild the index now", subtitle = "%,d files and folders · %,d documents with text".format(counts.first, counts.second), icon = WonderIcons.Refresh, tint = Color(0xFF1E7FE8), onClick = { index.clear(); reindex() })
+                PanelDivider()
+                var hm by remember { mutableIntStateOf(prefs.getInt("historyMax", 12)) }
+                Column(Modifier.padding(16.dp, 10.dp)) { Text("Remember recent searches", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(0 to "Off", 6 to "6", 12 to "12", 30 to "30").forEach { (v, n) -> Chip(n, hm == v, { hm = v; prefs.edit().putInt("historyMax", v).apply(); if (v == 0) { history = emptyList(); prefs.edit().remove("history").apply() } }) } } }
+                PanelDivider()
+                var go by remember { mutableStateOf(prefs.getBoolean("openOnEnter", true)) }
+                SwitchRow("Open the top result when I press enter", go, { go = it; prefs.edit().putBoolean("openOnEnter", it).apply() }, icon = WonderIcons.Search, tint = Color(0xFF1E7FE8))
+                PanelDivider()
+                var ts by remember { mutableIntStateOf(prefs.getInt("tileSize", 88)) }
+                Column(Modifier.padding(16.dp, 10.dp)) { Text("App tile size: $ts dp", style = MaterialTheme.typography.labelLarge); Slider(ts.toFloat(), { ts = it.toInt() }, valueRange = 60f..140f, onValueChangeFinished = { prefs.edit().putInt("tileSize", ts).apply() }) }
                 PanelDivider()
                 ListRow("Clear search history", icon = WonderIcons.DeleteSweep, tint = Color(0xFF7A7F87), onClick = { history = emptyList(); prefs.edit().remove("history").apply() })
             }
@@ -256,6 +267,7 @@ fun BeaconApp() {
                 SearchFieldFocus(q, { q = it }, "Search apps, settings, files, sums…", focus) {
                     remember(q)
                     val top = apps.maxByOrNull { appScore(it, q) }?.takeIf { appScore(it, q) > 0 }
+                    if (!prefs.getBoolean("openOnEnter", true)) return@SearchFieldFocus
                     when { top != null -> open(top); others.firstOrNull() != null -> others.first().intent?.let { context.launchSafely(it) {} }; files.isNotEmpty() -> openFile(context, File(files.first().path)) }
                 }
             }
@@ -365,7 +377,7 @@ private fun AllApps(apps: List<AppHit>, groups: List<AppGroup>, launches: Map<St
                 SORTS.forEach { (id, name) -> Chip(name, sort == id, { sort = id; prefs.edit().putString("sort", id).apply() }) }
             }
         }
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(88.dp), Modifier.fillMaxSize(), state = rememberTabTopGrid(), contentPadding = PaddingValues(12.dp)) {
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(prefs.getInt("tileSize", 88).dp), Modifier.fillMaxSize(), state = rememberTabTopGrid(), contentPadding = PaddingValues(12.dp)) {
             if (filter.isBlank()) items(groups.size, key = { "g" + groups[it].id }) { i ->
                 val g = groups[i]
                 Column(Modifier.padding(4.dp).clip(RoundedCornerShape(12.dp)).clickable { openGroup = g }.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {

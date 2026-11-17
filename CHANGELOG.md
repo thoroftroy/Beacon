@@ -1,5 +1,11 @@
 # Beacon changelog
 
+## v0.5.18
+
+- New settings: how many recent searches to remember, whether enter opens the top result, and app tile size
+- Text size and accent colour chosen in Control Room now apply here
+- New Rotate with the phone switch in Settings
+
 ## v0.5.17
 
 - Loading screens now say what they are doing instead of showing a bare spinner
