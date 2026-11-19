@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.21
+
+- The Wonderdesk Launcher no longer appears in Beacon's app list (it is the home screen, so there is nothing to open)
+
 ## v0.5.20
 
 - Settings are grouped under clear headings: search, and results and history

@@ -75,7 +75,8 @@ internal fun loadApps(c: Context): List<AppHit> {
     val pm = c.packageManager
     val aliases = runCatching { SharedCatalog.aliases(c) }.getOrDefault(emptyMap())
     val la = c.getSystemService(android.content.pm.LauncherApps::class.java)
-    return la.getActivityList(null, android.os.Process.myUserHandle()).map { ai ->
+    // The Wonderdesk Launcher is the home screen itself: opening it from here does nothing useful, so it is never listed.
+    return la.getActivityList(null, android.os.Process.myUserHandle()).filter { it.componentName.packageName != "dev.wonderdesk.launcher" }.map { ai ->
         val pkg = ai.componentName.packageName
         // Wonderdesk apps show their full artwork; others their own icon.
         val art = if (pkg.startsWith("dev.wonderdesk.")) runCatching {
