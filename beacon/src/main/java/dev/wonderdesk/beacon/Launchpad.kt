@@ -173,6 +173,27 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
     val resumed = rememberIsResumed()
     val apps = AppCache.apps
 
+    // An app that is installed or uninstalled shows up (or goes) right away, not after the next refresh.
+    DisposableEffect(Unit) {
+        val rx = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context, i: android.content.Intent) {
+                val pkg = i.data?.schemeSpecificPart
+                if (i.action == android.content.Intent.ACTION_PACKAGE_REMOVED && pkg != null && !i.getBooleanExtra(android.content.Intent.EXTRA_REPLACING, false)) AppCache.apps = AppCache.apps.filter { it.pkg != pkg }
+                AppCache.at = 0L; scope.launch { AppCache.apps = withContext(Dispatchers.IO) { runCatching { loadApps(context) }.getOrDefault(AppCache.apps) }; AppCache.at = System.currentTimeMillis() }
+            }
+        }
+        val f = android.content.IntentFilter().apply { addAction(android.content.Intent.ACTION_PACKAGE_REMOVED); addAction(android.content.Intent.ACTION_PACKAGE_ADDED); addAction(android.content.Intent.ACTION_PACKAGE_REPLACED); addDataScheme("package") }
+        context.registerReceiver(rx, f)
+        onDispose { runCatching { context.unregisterReceiver(rx) } }
+    }
+    // Coming back to Beacon: drop anything that is no longer installed straight away.
+    LaunchedEffect(resumed) {
+        if (resumed) {
+            val pm = context.packageManager
+            val alive = AppCache.apps.filter { runCatching { pm.getApplicationInfo(it.pkg, 0); true }.getOrDefault(false) }
+            if (alive.size != AppCache.apps.size) { AppCache.apps = alive; AppCache.at = 0L }
+        }
+    }
     LaunchedEffect(Unit) {
         if (AppCache.apps.isEmpty() || System.currentTimeMillis() - AppCache.at > 15_000) {
             AppCache.apps = withContext(Dispatchers.IO) { runCatching { loadApps(context) }.getOrDefault(AppCache.apps) }; AppCache.at = System.currentTimeMillis()
