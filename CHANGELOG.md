@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.27
+
+- An app you uninstall or install shows up (or goes) in Launchpad and search straight away
+
 ## v0.5.26
 
 - Video files open in Memories (Cinema has been merged into it)
