@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.25
+
+- At night the animated background gets a stronger wash, so text stays easy to read on dark scenes
+
 ## v0.5.24
 
 - Each app's animated scene now has its own drifting symbols (maths signs in Abacus, notes in Echo, arrows in Wayfinder and so on), and the scene is a little clearer while text stays easy to read
