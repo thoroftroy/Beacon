@@ -458,7 +458,7 @@ private fun LaunchpadTile(a: AppHit, size: Dp = 58.dp, onClick: () -> Unit, onLo
         .then(if (drag != null) Modifier.draggableApp(a, drag, onLong, onDrop).clickable(onClick = onClick) else Modifier.combinedClickable(onClick = onClick, onLongClick = onLong))
         .padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         a.icon?.let { Image(it, a.label, Modifier.size(size)) } ?: Box(Modifier.size(size).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = .2f)))
-        Text(a.label, Modifier.padding(top = 4.dp).width(82.dp), style = MaterialTheme.typography.labelMedium.copy(color = Color.White), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        WrapLabel(a.label, MaterialTheme.typography.labelMedium.copy(color = Color.White), Modifier.padding(top = 4.dp).width(82.dp))
     }
 }
 
@@ -474,7 +474,7 @@ private fun FolderTile(g: AppGroup, apps: List<AppHit>, drag: DragState? = null,
                 g.apps.mapNotNull { k -> apps.find { it.key == k } }.take(4).chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { row.forEach { a -> a.icon?.let { Image(it, null, Modifier.size(20.dp)) } } } }
             }
         }
-        Text(g.name, Modifier.padding(top = 4.dp).width(82.dp), style = MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.SemiBold), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        WrapLabel(g.name, MaterialTheme.typography.labelMedium.copy(color = Color.White, fontWeight = FontWeight.SemiBold), Modifier.padding(top = 4.dp).width(82.dp))
     }
 }
 
@@ -640,4 +640,17 @@ private fun ResultRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
             if (subtitle.isNotBlank()) Text(subtitle, color = Color.White.copy(alpha = .65f), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
+}
+
+
+/** An app's name under its icon: words wrap onto two lines, and if the longest word still wouldn't fit the name gets a little smaller instead of being broken in the middle of a word. */
+@Composable
+private fun WrapLabel(text: String, style: androidx.compose.ui.text.TextStyle, modifier: Modifier) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val maxPx = with(density) { 82.dp.toPx() }
+    val longest = text.split(' ').maxByOrNull { it.length } ?: text
+    val wide = remember(text, style) { measurer.measure(longest, style, maxLines = 1, softWrap = false).size.width.toFloat() }
+    val scale = if (wide > maxPx) (maxPx / wide).coerceAtLeast(.6f) else 1f
+    Text(text, modifier, style = style.copy(fontSize = style.fontSize * scale), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
 }

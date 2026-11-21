@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.29
+
+- The symbols drifting in the background are smaller and fainter so they no longer crowd text; selected segments and chips are readable in every look (including Super); the warning banner at the top has a solid backing so its text is easy to read
+- App names under icons that are too long for the space get a little smaller instead of being broken in the middle of a word
+
 ## v0.5.28
 
 - The animated background is now drawn directly on the screen at full sharpness instead of a small picture stretched up, so it is smooth and no longer looks pixelated; the grain over it is much subtler, and long tab names (like Feedback) shrink to fit instead of being cut off
