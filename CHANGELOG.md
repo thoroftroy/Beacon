@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.28
+
+- The animated background is now drawn directly on the screen at full sharpness instead of a small picture stretched up, so it is smooth and no longer looks pixelated; the grain over it is much subtler, and long tab names (like Feedback) shrink to fit instead of being cut off
+
 ## v0.5.27
 
 - An app you uninstall or install shows up (or goes) in Launchpad and search straight away
