@@ -513,7 +513,7 @@ internal fun openFile(c: Context, f: File) {
     val ext = f.extension.lowercase()
     val preferred = when {
         ext == "pdf" -> "dev.wonderdesk.pages"; ext in setOf("zip", "tar", "gz", "tgz") -> "dev.wonderdesk.packrat"
-        ext in setOf("jpg", "jpeg", "png", "webp", "gif", "heic") -> "dev.wonderdesk.memories"; ext in setOf("mp4", "mkv", "webm", "mov") -> "dev.wonderdesk.cinema"
+        ext in setOf("jpg", "jpeg", "png", "webp", "gif", "heic") -> "dev.wonderdesk.memories"; ext in setOf("mp4", "mkv", "webm", "mov") -> "dev.wonderdesk.memories"
         ext in setOf("txt", "md", "markdown", "log", "csv", "json") -> "dev.wonderdesk.scribble"; else -> null
     }
     val base = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime(f)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)

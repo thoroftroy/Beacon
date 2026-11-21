@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.5.26
+
+- Video files open in Memories (Cinema has been merged into it)
+
 ## v0.5.25
 
 - At night the animated background gets a stronger wash, so text stays easy to read on dark scenes
