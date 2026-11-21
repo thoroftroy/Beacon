@@ -1,5 +1,10 @@
 # Beacon changelog
 
+## v0.5.22
+
+- Fixed a gap above the keyboard in screens with a bottom tab bar: the tab bar now steps aside while you type, so you can see what you are writing
+- Launchpad now has the suite's animated water, bubbles and sky behind it, so it matches the theme instead of looking like a plain app drawer
+
 ## v0.5.21
 
 - The Wonderdesk Launcher no longer appears in Beacon's app list (it is the home screen, so there is nothing to open)

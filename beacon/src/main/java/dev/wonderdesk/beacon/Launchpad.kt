@@ -314,6 +314,8 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
                 tracker.addPosition(ch.uptimeMillis, ch.position); scope.launch { pull.snapTo((pull.value + d * .6f).coerceAtLeast(0f)) }
             }
         }) {
+        // The same animated water, bubbles and sky as the rest of the suite, so Launchpad doesn't look like a generic app drawer.
+        WonderBackdrop(dev.wonderdesk.shared.LocalLook.current, dev.wonderdesk.shared.LocalMotion.current, transparent = true)
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(horizontal = 14.dp)
             .graphicsLayer { val s = 1.06f - .06f * enter.value - (pull.value / 4000f).coerceAtMost(.06f); scaleX = s; scaleY = s; translationY = pull.value }) {
             Row(Modifier.padding(vertical = 12.dp).widthIn(max = 600.dp).align(Alignment.CenterHorizontally).mediaGlass(lookChrome, 22.dp, hud = true).padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
