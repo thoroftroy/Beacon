@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.6.0
+
+- What you type drifts through the background and it quickens while you search; a search that finds nothing goes quiet and grey
+
 ## v0.5.29
 
 - The symbols drifting in the background are smaller and fainter so they no longer crowd text; selected segments and chips are readable in every look (including Super); the warning banner at the top has a solid backing so its text is easy to read

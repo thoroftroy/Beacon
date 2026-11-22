@@ -232,6 +232,15 @@ fun BeaconApp() {
         val keep = prefs.getInt("historyMax", 12); history = (listOf(t) + history.filter { it != t }).take(keep); prefs.edit().putString("history", JSONArray(history).toString()).apply()
     }
     fun open(a: AppHit) { context.launchSafely(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(a.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) {}; Folders.recordLaunch(context, a.key) }
+    // What you type drifts through the scene and it quickens while you search; a search with nothing found goes quiet and grey.
+    val term = q.trim()
+    val typed = androidx.compose.runtime.remember(term) { term.lowercase().filter { it.isLetterOrDigit() }.toSet().take(6).map { it.toString() } }
+    val nothing = term.length >= 2 && files.isEmpty() && inside.isEmpty() && others.isEmpty()
+    SceneMoodEffect(when {
+        term.isEmpty() -> SceneMood()
+        nothing -> SceneMood(energy = .4f, hush = .35f, glyphs = listOf("?", "·", "•"))
+        else -> SceneMood(energy = 1.7f, glyphs = typed.ifEmpty { listOf("◉", "•") } + "◉")
+    })
     WonderApp(needs = APP_NEEDS, appName = "Beacon", about = ABOUT,
         title = "Beacon search",
         settings = {
