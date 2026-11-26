@@ -82,12 +82,34 @@ internal fun loadApps(c: Context): List<AppHit> {
         val art = if (pkg.startsWith("dev.wonderdesk.")) runCatching {
             val res = pm.getResourcesForApplication(pkg)
             val id = listOf("wonderdesk_${pkg.substringAfterLast('.')}_icon", "wonderdesk_icon").map { res.getIdentifier(it, "drawable", pkg) }.first { it != 0 }
-            android.graphics.BitmapFactory.decodeResource(res, id, android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 })?.let { android.graphics.Bitmap.createScaledBitmap(it, 144, (144f * it.height / it.width).toInt(), true).asImageBitmap() }
+            android.graphics.BitmapFactory.decodeResource(res, id, android.graphics.BitmapFactory.Options().apply { inSampleSize = 2; inMutable = pkg == "dev.wonderdesk.chronicle" })?.let {
+                if (pkg == "dev.wonderdesk.chronicle") ChronicleDate.draw(it)
+                android.graphics.Bitmap.createScaledBitmap(it, 144, (144f * it.height / it.width).toInt(), true).asImageBitmap()
+            }
         }.getOrNull() else null
         AppHit(ai.componentName.flattenToShortString(), pkg, ai.componentName, ai.label.toString(), art ?: runCatching { ai.getIcon(c.resources.displayMetrics.densityDpi).toBitmap(144, 144).asImageBitmap() }.getOrNull(),
             if (pkg.startsWith("dev.wonderdesk.")) aliases[pkg.substringAfterLast('.')].orEmpty() else emptyList(),
             runCatching { pm.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L), ai.applicationInfo.category)
     }.sortedBy { it.label.lowercase() }
+}
+
+/** Chronicle's icon is a blank flip calendar; like the Launcher, Beacon writes today's month and day on it. */
+internal object ChronicleDate {
+    fun draw(b: android.graphics.Bitmap) {
+        val cv = android.graphics.Canvas(b); val k = b.width / 512f
+        val today = java.time.LocalDate.now()
+        val ink = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF14110F.toInt(); textAlign = android.graphics.Paint.Align.CENTER
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+        }
+        val month = today.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH).uppercase()
+        ink.textSize = 62f * k
+        cv.save(); cv.rotate(-94f, 172f * k, 276f * k); cv.drawText(month, 172f * k, 276f * k + ink.textSize * .35f, ink); cv.restore()
+        val d = "%02d".format(today.dayOfMonth)
+        ink.textSize = 190f * k
+        cv.save(); cv.rotate(-4f, 277f * k, 268f * k); cv.drawText(d.substring(0, 1), 277f * k, 335f * k, ink); cv.restore()
+        cv.save(); cv.rotate(-4f, 373f * k, 268f * k); cv.drawText(d.substring(1, 2), 373f * k, 333f * k, ink); cv.restore()
+    }
 }
 
 data class AppGroup(val id: String, val name: String, val apps: List<String>)
