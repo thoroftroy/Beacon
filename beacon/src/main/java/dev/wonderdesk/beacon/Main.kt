@@ -258,6 +258,10 @@ fun BeaconApp() {
     val term = q.trim()
     val typed = androidx.compose.runtime.remember(term) { term.lowercase().filter { it.isLetterOrDigit() }.toSet().take(6).map { it.toString() } }
     val nothing = term.length >= 2 && files.isEmpty() && inside.isEmpty() && others.isEmpty()
+    // The radar shows a blip for each result as they come in, and every letter you type sends a sweep out from the middle.
+    SceneFeedScope()
+    SideEffect { SceneFeed.count = if (term.isEmpty()) -1 else (files.size + inside.size + others.size).coerceAtMost(40) }
+    LaunchedEffect(term) { if (term.isNotEmpty()) SceneFeed.beat() }
     SceneMoodEffect(when {
         term.isEmpty() -> SceneMood()
         nothing -> SceneMood(energy = .4f, hush = .35f, glyphs = listOf("?", "·", "•"))
