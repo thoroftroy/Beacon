@@ -83,9 +83,7 @@ class LaunchpadActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 31) runCatching {
-            if (windowManager.isCrossWindowBlurEnabled) { window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND); window.attributes = window.attributes.apply { blurBehindRadius = 48 } }
-        }
+        // No blur behind: Beacon's own scene covers the screen, and blurring what is under it would only cost battery.
         if (intent?.getBooleanExtra("search", false) == true) searchRequest.intValue = 1
         setContent { WonderTheme { LaunchpadScreen(searchRequest.intValue, onClose = ::close) } }
     }
@@ -336,7 +334,17 @@ private fun LaunchpadScreen(searchRequest: Int, onClose: () -> Unit) {
             }
         }) {
         // The same animated water, bubbles and sky as the rest of the suite, so Launchpad doesn't look like a generic app drawer.
-        WonderBackdrop(dev.wonderdesk.shared.LocalLook.current, dev.wonderdesk.shared.LocalMotion.current, transparent = true)
+        // Beacon's own living scene (radar sweep, blips, the look's water, hills or space), darkened so white names stay easy to read.
+        val look = dev.wonderdesk.shared.LocalLook.current
+        WonderSceneBackdrop(look, dev.wonderdesk.shared.LocalMotion.current, "Beacon")
+        // Multiplying a deep colour over it keeps every line and bubble of the scene but turns its light wash into deep water, dusk hills or night sky.
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            drawRect(Brush.verticalGradient(when (look) {
+                WonderLook.BLISS -> listOf(Color(0xFF5E7E46), Color(0xFF2E4422))
+                WonderLook.SUPER -> listOf(Color(0xFFB8A8E0), Color(0xFF6A5A9A))
+                else -> listOf(Color(0xFF3F7BAA), Color(0xFF173D5E))
+            }), blendMode = androidx.compose.ui.graphics.BlendMode.Multiply)
+        }
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(horizontal = 14.dp)
             .graphicsLayer { val s = 1.06f - .06f * enter.value - (pull.value / 4000f).coerceAtMost(.06f); scaleX = s; scaleY = s; translationY = pull.value }) {
             Row(Modifier.padding(vertical = 12.dp).widthIn(max = 600.dp).align(Alignment.CenterHorizontally).mediaGlass(lookChrome, 22.dp, hud = true).padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
@@ -648,7 +656,7 @@ private fun ResultRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
 private fun WrapLabel(text: String, style: androidx.compose.ui.text.TextStyle, modifier: Modifier) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val maxPx = with(density) { 82.dp.toPx() }
+    val maxPx = with(density) { 82.dp.toPx() } * .9f   // a little room to spare: a name must never break inside a word
     val longest = text.split(' ').maxByOrNull { it.length } ?: text
     val wide = remember(text, style) { measurer.measure(longest, style, maxLines = 1, softWrap = false).size.width.toFloat() }
     val scale = if (wide > maxPx) (maxPx / wide).coerceAtLeast(.6f) else 1f

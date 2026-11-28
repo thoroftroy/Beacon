@@ -1,5 +1,11 @@
 # Beacon changelog
 
+## v0.7.2
+
+- Launchpad finally looks like part of Wonderdesk instead of a generic app drawer: Beacon's own living scene fills it (the radar sweep with its blips, the bubbles and light of your look), deepened to night water in Aqua, dusk hills in Bliss and a violet sky in Super so the names stay easy to read
+- App names under the icons never break in the middle of a word any more ("Wonderdes k"); a long name gets a touch smaller instead
+- Opening Launchpad costs less battery: it no longer blurs the screen underneath, which its scene covers anyway
+
 ## v0.7.1
 
 - The moving background holds still while Battery Saver is on, so it uses next to no power then. It still changes with what the app is doing
