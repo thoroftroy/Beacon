@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.7.3
+
+- More ? buttons: the settings that were not obvious now explain in a line or two what they do and why you might want them
+
 ## v0.7.2
 
 - Launchpad finally looks like part of Wonderdesk instead of a generic app drawer: Beacon's own living scene fills it (the radar sweep with its blips, the bubbles and light of your look), deepened to night water in Aqua, dusk hills in Bliss and a violet sky in Super so the names stay easy to read

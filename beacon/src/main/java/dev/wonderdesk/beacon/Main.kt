@@ -272,9 +272,9 @@ fun BeaconApp() {
         settings = {
             var contents by remember { mutableStateOf(prefs.getBoolean("contents", true)) }
             Panel(title = "Search", footer = "Beacon reads text files to find words inside them: notes, Markdown, code, subtitles, spreadsheets saved as CSV and more. The index stays on this phone.") {
-                SwitchRow("Search contacts", searchContacts, { searchContacts = it; prefs.edit().putBoolean("searchContacts", it).apply() }, icon = WonderIcons.Person, tint = Color(0xFF16A085), subtitle = "Switch off to stop contacts showing in results, without taking the permission away")
+                SwitchRow("Search contacts", searchContacts, { searchContacts = it; prefs.edit().putBoolean("searchContacts", it).apply() }, icon = WonderIcons.Person, tint = Color(0xFF16A085), subtitle = "Switch off to stop contacts showing in results, without taking the permission away", help = "Names and numbers from your contacts show up in results, so you can call or message straight from the search.")
                 PanelDivider()
-                SwitchRow("Search inside files", contents, { contents = it; prefs.edit().putBoolean("contents", it).apply() }, icon = WonderIcons.TextSnippet, tint = Color(0xFF8E44AD))
+                SwitchRow("Search inside files", contents, { contents = it; prefs.edit().putBoolean("contents", it).apply() }, icon = WonderIcons.TextSnippet, tint = Color(0xFF8E44AD), help = "Also looks for your words inside documents and notes, not just in their names. Slower on a full phone.")
                 PanelDivider()
                 ListRow("Rebuild the index now", subtitle = "%,d files and folders · %,d documents with text".format(counts.first, counts.second), icon = WonderIcons.Refresh, tint = Color(0xFF1E7FE8), onClick = { index.clear(); reindex() })
             }
@@ -288,7 +288,7 @@ fun BeaconApp() {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(5, 15, 30, 60).forEach { v -> Chip("$v", fm == v, { fm = v; prefs.edit().putInt("fileMax", v).apply() }) } } }
                 PanelDivider()
                 var go by remember { mutableStateOf(prefs.getBoolean("openOnEnter", true)) }
-                SwitchRow("Open the top result when I press enter", go, { go = it; prefs.edit().putBoolean("openOnEnter", it).apply() }, icon = WonderIcons.Search, tint = Color(0xFF1E7FE8))
+                SwitchRow("Open the top result when I press enter", go, { go = it; prefs.edit().putBoolean("openOnEnter", it).apply() }, icon = WonderIcons.Search, tint = Color(0xFF1E7FE8), help = "Pressing enter on the keyboard opens the first result right away instead of searching the web.")
                 PanelDivider()
                 var ts by remember { mutableIntStateOf(prefs.getInt("tileSize", 88)) }
                 Column(Modifier.padding(16.dp, 10.dp)) { Text("App tile size: $ts dp", style = MaterialTheme.typography.labelLarge); Slider(ts.toFloat(), { ts = it.toInt() }, valueRange = 60f..140f, onValueChangeFinished = { prefs.edit().putInt("tileSize", ts).apply() }) }
