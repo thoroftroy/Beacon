@@ -1,5 +1,9 @@
 # Beacon changelog
 
+## v0.7.1
+
+- The moving background holds still while Battery Saver is on, so it uses next to no power then. It still changes with what the app is doing
+
 ## v0.7.0
 
 - The background radar shows a blip for each result as you search, and every letter you type sends a sweep out from the middle
